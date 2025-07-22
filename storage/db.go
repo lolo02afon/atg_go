@@ -2,7 +2,6 @@ package storage
 
 import (
 	"database/sql"
-	"log"
 
 	"atg_go/models"
 
@@ -10,44 +9,77 @@ import (
 )
 
 type DB struct {
-	conn *sql.DB
+	Conn *sql.DB
 }
 
-// Подключение к БД
-func NewDB(dataSource string) *DB {
-	db, err := sql.Open("postgres", dataSource)
-	if err != nil {
-		log.Fatalf("Ошибка подключения к БД: %v", err)
-	}
-	err = db.Ping()
-	if err != nil {
-		log.Fatalf("Ошибка при попытке соединения: %v", err)
-	}
-	return &DB{conn: db}
+func NewDB(conn *sql.DB) *DB {
+	return &DB{Conn: conn}
 }
 
-// Создание аккаунта
-func (db *DB) CreateAccount(account models.Account) (models.Account, error) {
+func (db *DB) CreateAccount(account models.Account) (*models.Account, error) {
 	query := `
-		INSERT INTO accounts (phone, api_id, api_hash, is_authorized)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id;
+		INSERT INTO accounts (phone, api_id, api_hash)
+		VALUES ($1, $2, $3)
+		RETURNING id
 	`
-	err := db.conn.QueryRow(query, account.Phone, account.ApiID, account.ApiHash, account.IsAuthorized).Scan(&account.ID)
-	return account, err
+
+	err := db.Conn.QueryRow(query, account.Phone, account.APIID, account.APIHash).Scan(&account.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &account, nil
 }
 
-// Сохранение кода подтверждения
-func (db *DB) CreateVerificationCode(code models.VerificationCode) (models.VerificationCode, error) {
-	query := `INSERT INTO verification_codes (account_id, code, is_verified, send)
-	          VALUES ($1, $2, $3, $4) RETURNING id;`
-	err := db.conn.QueryRow(query, code.AccountID, code.Code, code.IsVerified, code.Send).Scan(&code.ID)
-	return code, err
+func (db *DB) GetAccountByID(id int) (*models.Account, error) {
+	var account models.Account
+	query := `
+		SELECT id, phone, api_id, api_hash
+		FROM accounts
+		WHERE id = $1
+	`
+	err := db.Conn.QueryRow(query, id).Scan(&account.ID, &account.Phone, &account.APIID, &account.APIHash)
+	if err != nil {
+		return nil, err
+	}
+	return &account, nil
 }
 
-// Получение аккаунта по id
+func (db *DB) CreateVerificationCode(code models.VerificationCode) (*models.VerificationCode, error) {
+	query := `
+		INSERT INTO verification_codes (account_id, code, is_verified)
+		VALUES ($1, $2, $3)
+		RETURNING id
+	`
+	err := db.Conn.QueryRow(query, code.AccountID, code.Code, code.IsVerified).Scan(&code.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &code, nil
+}
+
 func (db *DB) UpdateVerificationCode(code models.VerificationCode) error {
-	query := `UPDATE verification_codes SET code = $1, is_verified = $2, send = $3 WHERE id = $4`
-	_, err := db.conn.Exec(query, code.Code, code.IsVerified, code.Send, code.ID)
+	query := `
+		UPDATE verification_codes
+		SET code = $1, is_verified = $2
+		WHERE id = $3
+	`
+	_, err := db.Conn.Exec(query, code.Code, code.IsVerified, code.ID)
 	return err
+}
+
+func (db *DB) GetVerificationCodeByID(id int) (*models.VerificationCode, error) {
+	query := `
+		SELECT id, account_id, code, is_verified
+		FROM verification_codes
+		WHERE id = $1
+	`
+
+	var code models.VerificationCode
+	err := db.Conn.QueryRow(query, id).Scan(&code.ID, &code.AccountID, &code.Code, &code.IsVerified)
+	if err != nil {
+		return nil, err
+	}
+
+	return &code, nil
 }
