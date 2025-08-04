@@ -18,27 +18,30 @@ import (
 // 3. Выбирает случайный пост
 // 4. Находит обсуждение этого поста
 // 5. Отправляет случайный эмодзи в обсуждение
-func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount int) error {
+// Возвращает ID поста, к которому был отправлен комментарий. Если комментарий не отправлен, вернёт 0.
+func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount int, canSend func(messageID int) (bool, error)) (int, error) {
 	log.Printf("[START] Отправка эмодзи в канал %s от имени %s", channelURL, phone)
 
 	// Извлекаем username из URL канала (например, из "https://t.me/channel" извлекаем "channel")
 	username, err := module.Modf_ExtractUsername(channelURL)
 	if err != nil {
-		return fmt.Errorf("не удалось извлечь имя пользователя: %w", err)
+		return 0, fmt.Errorf("не удалось извлечь имя пользователя: %w", err)
 	}
 
 	// Создаем клиент Telegram с указанными параметрами
 	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// Создаем контекст с таймаутом 60 секунд
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel() // Гарантируем отмену контекста при выходе из функции
 
+	var msgID int
+
 	// Запускаем клиент и выполняем операции
-	return client.Run(ctx, func(ctx context.Context) error {
+	err = client.Run(ctx, func(ctx context.Context) error {
 		api := tg.NewClient(client) // Создаем API-клиент
 
 		// Получаем информацию о канале по username
@@ -98,6 +101,17 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 		// всегда отвечаем именно на PostMessage из Discussion
 		replyToMsgID := discussionData.PostMessage.ID
 
+		if canSend != nil {
+			allowed, err := canSend(replyToMsgID)
+			if err != nil {
+				return err
+			}
+			if !allowed {
+				log.Printf("[INFO] Аккаунт %s уже комментировал пост %d — пропуск", phone, replyToMsgID)
+				return nil
+			}
+		}
+
 		// Подписываемся на группу обсуждения (в ней будут видны ответы)
 		if errJoinDisc := module.Modf_JoinChannel(ctx, api, discussionData.Chat); errJoinDisc != nil {
 			log.Printf("[ERROR] Не удалось присоединиться к чату обсуждений: ID=%d Ошибка=%v",
@@ -105,12 +119,18 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 		}
 
 		// Отправляем эмодзи
-		return sendEmojiReply(ctx, api, &tg.InputPeerChannel{
+		if err := sendEmojiReply(ctx, api, &tg.InputPeerChannel{
 			ChannelID:  discussionData.Chat.ID,
 			AccessHash: discussionData.Chat.AccessHash,
-		}, replyToMsgID)
+		}, replyToMsgID); err != nil {
+			return err
+		}
+		msgID = replyToMsgID
+		return nil
 
 	})
+
+	return msgID, err
 }
 
 var emojiList = []string{

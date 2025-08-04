@@ -96,19 +96,31 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		log.Printf("[HANDLER INFO] Selected channel for %s: %s", account.Phone, channelURL)
 
 		// Отправка комментария в выбранный канал
-		if err := telegram.SendComment(
+		msgID, err := telegram.SendComment(
 			account.Phone,
 			channelURL,
 			account.ApiID,
 			account.ApiHash,
 			request.PostsCount,
-		); err != nil {
+			func(messageID int) (bool, error) {
+				exists, err := h.DB.HasComment(account.ID, messageID)
+				if err != nil {
+					return false, err
+				}
+				return !exists, nil
+			},
+		)
+		if err != nil {
 			log.Printf("[HANDLER ERROR] Failed for %s: %v", account.Phone, err)
 			errorCount++
 			continue
 		}
+		if msgID == 0 {
+			log.Printf("[HANDLER INFO] Аккаунт %s уже оставлял комментарий, пропуск", account.Phone)
+			continue
+		}
 
-		h.recordComment(account.ID, channelID, 0)
+		h.recordComment(account.ID, channelID, msgID)
 
 		successCount++
 		log.Printf("[HANDLER DEBUG] Success for account: %s", account.Phone)

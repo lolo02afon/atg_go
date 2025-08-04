@@ -8,3 +8,14 @@ func (db *DB) SaveActivity(accountID, channelID, messageID int, activityType str
 	)
 	return err
 }
+
+// HasComment проверяет, оставляла ли учетная запись комментарий к указанному посту.
+// Возвращает true, если запись с activity_type = 'comment' уже существует.
+func (db *DB) HasComment(accountID, messageID int) (bool, error) {
+	var exists bool
+	err := db.Conn.QueryRow(
+		`SELECT EXISTS(SELECT 1 FROM activity WHERE id_account = $1 AND id_message = $2 AND activity_type = 'comment')`,
+		accountID, messageID,
+	).Scan(&exists)
+	return exists, err
+}
