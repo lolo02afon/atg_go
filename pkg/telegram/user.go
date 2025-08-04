@@ -23,15 +23,11 @@ func GetUserID(phone string, apiID int, apiHash string) (int, error) {
 	var userID int
 	err = client.Run(ctx, func(ctx context.Context) error {
 		api := tg.NewClient(client)
-		full, err := api.UsersGetFullUser(ctx, &tg.UsersGetFullUserRequest{ID: &tg.InputUserSelf{}})
+		full, err := api.UsersGetFullUser(ctx, &tg.InputUserSelf{})
 		if err != nil {
 			return fmt.Errorf("не удалось получить информацию о пользователе: %w", err)
 		}
-		user, ok := full.User.(*tg.User)
-		if !ok {
-			return fmt.Errorf("некорректный тип пользователя")
-		}
-		userID = user.ID
+		userID = int(full.FullUser.ID)
 		return nil
 	})
 	if err != nil {
