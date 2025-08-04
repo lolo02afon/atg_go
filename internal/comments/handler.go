@@ -103,7 +103,7 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 			account.ApiHash,
 			request.PostsCount,
 			func(messageID int) (bool, error) {
-				exists, err := h.DB.HasComment(account.ID, messageID)
+				exists, err := h.DB.HasCommentForPost(channelID, messageID)
 				if err != nil {
 					return false, err
 				}
@@ -116,7 +116,7 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 			continue
 		}
 		if msgID == 0 {
-			log.Printf("[HANDLER INFO] Аккаунт %s уже оставлял комментарий, пропуск", account.Phone)
+			log.Printf("[HANDLER INFO] На пост уже оставлен комментарий, пропуск для %s", account.Phone)
 			continue
 		}
 
