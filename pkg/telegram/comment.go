@@ -86,6 +86,11 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 				continue
 			}
 
+			// Присоединяемся к чату обсуждения, чтобы иметь возможность читать и оставлять комментарии
+			if errJoinDisc := module.Modf_JoinChannel(ctx, api, discussionData.Chat); errJoinDisc != nil {
+				log.Printf("[ERROR] Не удалось присоединиться к чату обсуждений: ID=%d Ошибка=%v", discussionData.Chat.ID, errJoinDisc)
+			}
+
 			replyToMsgID := discussionData.PostMessage.ID
 
 			if canSend != nil {
@@ -99,7 +104,7 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 				}
 			}
 
-			hasOwn, err := hasRecentCommentByUsers(ctx, api, channel, replyToMsgID, idSet)
+			hasOwn, err := hasRecentCommentByUsers(ctx, api, discussionData.Chat, replyToMsgID, idSet)
 			if err != nil {
 				log.Printf("[DEBUG] пост %d: не удалось проверить последние комментарии (%v) — пропуск", p.ID, err)
 				continue
@@ -107,10 +112,6 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 			if hasOwn {
 				log.Printf("[INFO] Пост %d уже комментирован нашими аккаунтами, пропуск для %s", replyToMsgID, phone)
 				continue
-			}
-
-			if errJoinDisc := module.Modf_JoinChannel(ctx, api, discussionData.Chat); errJoinDisc != nil {
-				log.Printf("[ERROR] Не удалось присоединиться к чату обсуждений: ID=%d Ошибка=%v", discussionData.Chat.ID, errJoinDisc)
 			}
 
 			if err := sendEmojiReply(ctx, api, &tg.InputPeerChannel{
@@ -169,13 +170,13 @@ func sendEmojiReply(ctx context.Context, api *tg.Client, peer *tg.InputPeerChann
 }
 
 // проверяет, есть ли среди последних комментариев к посту сообщения от наших аккаунтов
-func hasRecentCommentByUsers(ctx context.Context, api *tg.Client, channel *tg.Channel, msgID int, userIDs map[int]struct{}) (bool, error) {
+func hasRecentCommentByUsers(ctx context.Context, api *tg.Client, chat *tg.Channel, msgID int, userIDs map[int]struct{}) (bool, error) {
 	if len(userIDs) == 0 {
 		return false, nil
 	}
 
 	res, err := api.MessagesGetReplies(ctx, &tg.MessagesGetRepliesRequest{
-		Peer:  &tg.InputPeerChannel{ChannelID: channel.ID, AccessHash: channel.AccessHash},
+		Peer:  &tg.InputPeerChannel{ChannelID: chat.ID, AccessHash: chat.AccessHash},
 		MsgID: msgID,
 		Limit: 30,
 	})
