@@ -3,7 +3,6 @@ package module
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/gotd/td/tg"
 )
