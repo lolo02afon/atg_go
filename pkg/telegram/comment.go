@@ -41,13 +41,14 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 	return client.Run(ctx, func(ctx context.Context) error {
 		api := tg.NewClient(client) // Создаем API-клиент
 
-		// запрашиваем сведения о самом себе — метод принимает InputUserClass, а не Request
-		meFull, err := api.UsersGetFullUser(ctx, &tg.InputUserSelf{})
-		if err != nil {
-			return fmt.Errorf("failed to fetch self userID: %w", err)
-		}
-		// в возвращённом UserFull поле User — это *tg.User
-		selfID := meFull.User.ID
+		// запрашиваем сведения о самом себе — временно отключено,
+		// так как проверка на уже оставленный комментарий отключена
+		// meFull, err := api.UsersGetFullUser(ctx, &tg.InputUserSelf{})
+		// if err != nil {
+		//      return fmt.Errorf("failed to fetch self userID: %w", err)
+		// }
+		// // в возвращённой структуре поле FullUser содержит данные пользователя
+		// selfID := meFull.FullUser.ID
 
 		// Получаем информацию о канале по username
 		resolved, err := api.ContactsResolveUsername(ctx, &tg.ContactsResolveUsernameRequest{
@@ -64,13 +65,9 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 		}
 
 		// Подписываемся на сам канал, чтобы получить доступ к дискуссии
-		errJoinChannel := module.Modf_JoinChannel(ctx, api, channel)
-		if errJoinChannel != nil {
-			log.Printf("[LOG] Failed to join channel:   ID=%d  AccessHash=%d  Err=%v",
+		if errJoinChannel := module.Modf_JoinChannel(ctx, api, channel); errJoinChannel != nil {
+			log.Printf("[ERROR] Failed to join channel: ID=%d AccessHash=%d Err=%v",
 				channel.ID, channel.AccessHash, errJoinChannel)
-		} else {
-			log.Printf("[LOG] Joined channel successfully: ID=%d  AccessHash=%d",
-				channel.ID, channel.AccessHash)
 		}
 
 		// 1️⃣ Запрашиваем пул постов один раз
@@ -89,7 +86,6 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 		})
 
 		var (
-			post           *tg.Message
 			discussionData *module.Discussion
 			found          bool
 		)
@@ -99,29 +95,37 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 			if i >= postsCount {
 				break
 			}
-			log.Printf("[LOG] проверяем пост %d (итерация %d)", p.ID, i+1)
 			discussionData, err = module.Modf_getPostDiscussion(ctx, api, channel, p.ID)
 			if err != nil {
 				// просто пропускаем этот пост и идём дальше
-				log.Printf("[LOG] пост %d: не удалось получить дискуссию (%v) — пропускаем", p.ID, err)
+				log.Printf("[DEBUG] post %d: discussion fetch failed (%v) — skipping", p.ID, err)
 				continue
 			}
 
-			// Пропускаем, если этот же аккаунт уже комментировал (FromID == selfID)
-			skip := false
-			for _, r := range discussionData.Replies {
-				if peer, ok := r.FromID.(*tg.PeerUser); ok && peer.UserID == selfID {
-					log.Printf("[LOG] пост %d уже прокомментирован selfID=%d — пропускаем", p.ID, selfID)
-					skip = true
-					break
-				}
-			}
-			if skip {
-				continue
-			}
+			log.Printf("[DEBUG] post %d has %d replies", p.ID, len(discussionData.Replies))
 
-			// нашли «чистый» пост
-			post, found = p, true
+			// временно убрали проверку, был ли комментарий уже от нашего аккаунта
+			// чтобы протестировать отправку комментария без фильтрации
+			//
+			// skip := false
+			// for _, r := range discussionData.Replies {
+			//      if peer, ok := r.FromID.(*tg.PeerUser); ok {
+			//              log.Printf("[DEBUG] reply from userID=%d", peer.UserID)
+			//              if peer.UserID == selfID {
+			//                      log.Printf("[DEBUG] post %d already commented by selfID=%d", p.ID, selfID)
+			//                      skip = true
+			//                      break
+			//              }
+			//      }
+			// }
+			// if skip {
+			//      log.Printf("[DEBUG] skipping post %d", p.ID)
+			//      continue
+			// }
+
+			// выбираем первый попавшийся пост
+			log.Printf("[DEBUG] selected post %d for commenting (self-check disabled)", p.ID)
+			found = true
 			break
 		}
 
@@ -131,16 +135,11 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 
 		// всегда отвечаем именно на PostMessage из Discussion
 		replyToMsgID := discussionData.PostMessage.ID
-		log.Printf("[LOG] Replying with emoji: groupID=%d  replyMsgID=%d",
-			discussionData.Chat.ID, replyToMsgID)
 
 		// Подписываемся на группу обсуждения (в ней будут видны ответы)
 		if errJoinDisc := module.Modf_JoinChannel(ctx, api, discussionData.Chat); errJoinDisc != nil {
-			log.Printf("[LOG] Failed to join discussion group: ID=%d  Err=%v",
+			log.Printf("[ERROR] Failed to join discussion group: ID=%d Err=%v",
 				discussionData.Chat.ID, errJoinDisc)
-		} else {
-			log.Printf("[LOG] Joined discussion group successfully: ID=%d",
-				discussionData.Chat.ID)
 		}
 
 		// Отправляем эмодзи
@@ -186,6 +185,5 @@ func sendEmojiReply(ctx context.Context, api *tg.Client, peer *tg.InputPeerChann
 		return fmt.Errorf("failed to send emoji: %w", err) // Возвращаем ошибку, если отправка не удалась
 	}
 
-	log.Printf("Emoji %s sent successfully", emoji) // Логируем успешную отправку
 	return nil
 }
