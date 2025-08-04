@@ -54,17 +54,6 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 	// Счётчики успешных и неуспешных попыток
 	var successCount, errorCount int
 
-	// Получаем userID всех аккаунтов для проверки собственных комментариев
-	userIDs := make(map[int64]struct{})
-	for _, acc := range accounts {
-		id, err := telegram.GetUserID(acc.Phone, acc.ApiID, acc.ApiHash)
-		if err != nil {
-			log.Printf("[HANDLER ERROR] Failed to get user ID for %s: %v", acc.Phone, err)
-			continue
-		}
-		userIDs[id] = struct{}{}
-	}
-
 	// Инициализируем генератор случайных чисел
 	rand.Seed(time.Now().UnixNano())
 
@@ -113,7 +102,6 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 			account.ApiID,
 			account.ApiHash,
 			request.PostsCount,
-			userIDs,
 		); err != nil {
 			log.Printf("[HANDLER ERROR] Failed for %s: %v", account.Phone, err)
 			errorCount++

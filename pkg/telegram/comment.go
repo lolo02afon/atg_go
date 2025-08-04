@@ -18,7 +18,7 @@ import (
 // 3. Выбирает случайный пост
 // 4. Находит обсуждение этого поста
 // 5. Отправляет случайный эмодзи в обсуждение
-func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount int, ourIDs map[int64]struct{}) error {
+func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount int) error {
 	log.Printf("[START] Отправка эмодзи в канал %s от имени %s", channelURL, phone)
 
 	// Извлекаем username из URL канала (например, из "https://t.me/channel" извлекаем "channel")
@@ -93,11 +93,6 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 				continue
 			}
 
-			if hasRecentOwnComments(discussionData.Replies, ourIDs, 30) {
-				log.Printf("[DEBUG] пропуск поста %d: уже содержит наш комментарий", p.ID)
-				continue
-			}
-
 			// log.Printf("[DEBUG] выбран пост %d для комментирования", p.ID)
 
 			found = true
@@ -124,23 +119,6 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 		}, replyToMsgID)
 
 	})
-}
-
-// hasRecentOwnComments проверяет последние limit комментариев и
-// возвращает true, если среди них есть комментарии наших аккаунтов.
-func hasRecentOwnComments(replies []*tg.Message, ourIDs map[int64]struct{}, limit int) bool {
-	start := 0
-	if len(replies) > limit {
-		start = len(replies) - limit
-	}
-	for _, r := range replies[start:] {
-		if peer, ok := r.FromID.(*tg.PeerUser); ok {
-			if _, exists := ourIDs[int64(peer.UserID)]; exists {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 var emojiList = []string{
