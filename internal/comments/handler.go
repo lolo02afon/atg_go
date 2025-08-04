@@ -57,6 +57,17 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 	// Инициализируем генератор случайных чисел
 	rand.Seed(time.Now().UnixNano())
 
+	// Собираем ID наших аккаунтов в Telegram
+	var userIDs []int
+	for _, acc := range accounts {
+		id, err := telegram.GetUserID(acc.Phone, acc.ApiID, acc.ApiHash)
+		if err != nil {
+			log.Printf("[HANDLER WARN] Не удалось получить ID для %s: %v", acc.Phone, err)
+			continue
+		}
+		userIDs = append(userIDs, id)
+	}
+
 	for i, account := range accounts {
 		// Задержка между аккаунтами (чтобы не слишком быстро подряд)
 		if i > 0 {
@@ -103,12 +114,13 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 			account.ApiHash,
 			request.PostsCount,
 			func(messageID int) (bool, error) {
-				exists, err := h.DB.HasComment(account.ID, messageID)
+				exists, err := h.DB.HasCommentForPost(channelID, messageID)
 				if err != nil {
 					return false, err
 				}
 				return !exists, nil
 			},
+			userIDs,
 		)
 		if err != nil {
 			log.Printf("[HANDLER ERROR] Failed for %s: %v", account.Phone, err)
@@ -116,7 +128,7 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 			continue
 		}
 		if msgID == 0 {
-			log.Printf("[HANDLER INFO] Аккаунт %s уже оставлял комментарий, пропуск", account.Phone)
+			log.Printf("[HANDLER INFO] На пост уже оставлен комментарий, пропуск для %s", account.Phone)
 			continue
 		}
 

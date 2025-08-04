@@ -19,7 +19,7 @@ import (
 // 4. Находит обсуждение этого поста
 // 5. Отправляет случайный эмодзи в обсуждение
 // Возвращает ID поста, к которому был отправлен комментарий. Если комментарий не отправлен, вернёт 0.
-func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount int, canSend func(messageID int) (bool, error)) (int, error) {
+func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount int, canSend func(messageID int) (bool, error), userIDs []int) (int, error) {
 	log.Printf("[START] Отправка эмодзи в канал %s от имени %s", channelURL, phone)
 
 	// Извлекаем username из URL канала (например, из "https://t.me/channel" извлекаем "channel")
@@ -74,59 +74,56 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 			return fmt.Errorf("не удалось получить историю канала: %w", err)
 		}
 
-		var (
-			discussionData *module.Discussion
-			found          bool
-		)
+		idSet := make(map[int]struct{}, len(userIDs))
+		for _, id := range userIDs {
+			idSet[id] = struct{}{}
+		}
 
-		//  Проходим по последним постам в порядке от новых к старым
 		for _, p := range posts {
-			discussionData, err = module.Modf_getPostDiscussion(ctx, api, channel, p.ID)
+			discussionData, err := module.Modf_getPostDiscussion(ctx, api, channel, p.ID)
 			if err != nil {
-				// просто пропускаем этот пост и идём дальше
 				log.Printf("[DEBUG] пост %d: не удалось получить обсуждение (%v) — пропуск", p.ID, err)
 				continue
 			}
 
-			// log.Printf("[DEBUG] выбран пост %d для комментирования", p.ID)
+			replyToMsgID := discussionData.PostMessage.ID
 
-			found = true
-			break
-		}
+			if canSend != nil {
+				allowed, err := canSend(replyToMsgID)
+				if err != nil {
+					return err
+				}
+				if !allowed {
+					log.Printf("[INFO] Пост %d уже комментирован нашими аккаунтами, пропуск для %s", replyToMsgID, phone)
+					continue
+				}
+			}
 
-		if !found {
-			return fmt.Errorf("не удалось найти подходящий пост без комментариев после %d проверок", postsCount)
-		}
-
-		// всегда отвечаем именно на PostMessage из Discussion
-		replyToMsgID := discussionData.PostMessage.ID
-
-		if canSend != nil {
-			allowed, err := canSend(replyToMsgID)
+			hasOwn, err := hasRecentCommentByUsers(ctx, api, channel, replyToMsgID, idSet)
 			if err != nil {
+				log.Printf("[DEBUG] пост %d: не удалось проверить последние комментарии (%v) — пропуск", p.ID, err)
+				continue
+			}
+			if hasOwn {
+				log.Printf("[INFO] Пост %d уже комментирован нашими аккаунтами, пропуск для %s", replyToMsgID, phone)
+				continue
+			}
+
+			if errJoinDisc := module.Modf_JoinChannel(ctx, api, discussionData.Chat); errJoinDisc != nil {
+				log.Printf("[ERROR] Не удалось присоединиться к чату обсуждений: ID=%d Ошибка=%v", discussionData.Chat.ID, errJoinDisc)
+			}
+
+			if err := sendEmojiReply(ctx, api, &tg.InputPeerChannel{
+				ChannelID:  discussionData.Chat.ID,
+				AccessHash: discussionData.Chat.AccessHash,
+			}, replyToMsgID); err != nil {
 				return err
 			}
-			if !allowed {
-				log.Printf("[INFO] Аккаунт %s уже комментировал пост %d — пропуск", phone, replyToMsgID)
-				return nil
-			}
+			msgID = replyToMsgID
+			return nil
 		}
 
-		// Подписываемся на группу обсуждения (в ней будут видны ответы)
-		if errJoinDisc := module.Modf_JoinChannel(ctx, api, discussionData.Chat); errJoinDisc != nil {
-			log.Printf("[ERROR] Не удалось присоединиться к чату обсуждений: ID=%d Ошибка=%v",
-				discussionData.Chat.ID, errJoinDisc)
-		}
-
-		// Отправляем эмодзи
-		if err := sendEmojiReply(ctx, api, &tg.InputPeerChannel{
-			ChannelID:  discussionData.Chat.ID,
-			AccessHash: discussionData.Chat.AccessHash,
-		}, replyToMsgID); err != nil {
-			return err
-		}
-		msgID = replyToMsgID
-		return nil
+		return fmt.Errorf("не удалось найти подходящий пост без комментариев после %d проверок", postsCount)
 
 	})
 
@@ -169,4 +166,39 @@ func sendEmojiReply(ctx context.Context, api *tg.Client, peer *tg.InputPeerChann
 
 	log.Printf("Эмодзи %s успешно отправлен", emoji)
 	return nil
+}
+
+// проверяет, есть ли среди последних комментариев к посту сообщения от наших аккаунтов
+func hasRecentCommentByUsers(ctx context.Context, api *tg.Client, channel *tg.Channel, msgID int, userIDs map[int]struct{}) (bool, error) {
+	if len(userIDs) == 0 {
+		return false, nil
+	}
+
+	res, err := api.MessagesGetReplies(ctx, &tg.MessagesGetRepliesRequest{
+		Peer:  &tg.InputPeerChannel{ChannelID: channel.ID, AccessHash: channel.AccessHash},
+		MsgID: msgID,
+		Limit: 30,
+	})
+	if err != nil {
+		return false, fmt.Errorf("не удалось получить комментарии: %w", err)
+	}
+
+	msgs, ok := res.(*tg.MessagesChannelMessages)
+	if !ok {
+		return false, fmt.Errorf("неожиданный тип ответа")
+	}
+
+	for _, m := range msgs.Messages {
+		msg, ok := m.(*tg.Message)
+		if !ok {
+			continue
+		}
+		if from, ok := msg.FromID.(*tg.PeerUser); ok {
+			if _, exist := userIDs[from.UserID]; exist {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
 }
