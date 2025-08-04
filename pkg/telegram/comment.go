@@ -18,13 +18,13 @@ import (
 // 3. Выбирает случайный пост
 // 4. Находит обсуждение этого поста
 // 5. Отправляет случайный эмодзи в обсуждение
-func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount int) error {
-	log.Printf("[START] Sending emoji to channel %s from %s", channelURL, phone)
+func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount int, ourIDs map[int64]struct{}) error {
+	log.Printf("[START] Отправка эмодзи в канал %s от имени %s", channelURL, phone)
 
 	// Извлекаем username из URL канала (например, из "https://t.me/channel" извлекаем "channel")
 	username, err := module.Modf_ExtractUsername(channelURL)
 	if err != nil {
-		return fmt.Errorf("failed to extract username: %w", err)
+		return fmt.Errorf("не удалось извлечь имя пользователя: %w", err)
 	}
 
 	// Создаем клиент Telegram с указанными параметрами
@@ -41,20 +41,12 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 	return client.Run(ctx, func(ctx context.Context) error {
 		api := tg.NewClient(client) // Создаем API-клиент
 
-		// // запрашиваем сведения о самом себе — метод принимает InputUserClass, а не Request
-		// meFull, err := api.UsersGetFullUser(ctx, &tg.InputUserSelf{})
-		// if err != nil {
-		// 	return fmt.Errorf("failed to fetch self userID: %w", err)
-		// }
-		// // в возвращённой структуре поле FullUser содержит данные пользователя
-		// selfID := meFull.FullUser.ID
-
 		// Получаем информацию о канале по username
 		resolved, err := api.ContactsResolveUsername(ctx, &tg.ContactsResolveUsernameRequest{
 			Username: username,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to resolve channel: %w", err)
+			return fmt.Errorf("не удалось распознать канал: %w", err)
 		}
 
 		// Находим канал среди полученных чатов
@@ -65,7 +57,7 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 
 		// Подписываемся на сам канал, чтобы получить доступ к дискуссии
 		if errJoinChannel := module.Modf_JoinChannel(ctx, api, channel); errJoinChannel != nil {
-			log.Printf("[ERROR] Failed to join channel: ID=%d AccessHash=%d Err=%v",
+			log.Printf("[ERROR] Не удалось вступить в канал: ID=%d AccessHash=%d Ошибка=%v",
 				channel.ID, channel.AccessHash, errJoinChannel)
 		}
 
@@ -97,30 +89,17 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 			discussionData, err = module.Modf_getPostDiscussion(ctx, api, channel, p.ID)
 			if err != nil {
 				// просто пропускаем этот пост и идём дальше
-				log.Printf("[DEBUG] post %d: discussion fetch failed (%v) — skipping", p.ID, err)
+				log.Printf("[DEBUG] пост %d: не удалось получить обсуждение (%v) — пропуск", p.ID, err)
 				continue
 			}
-			log.Printf("[DEBUG] post %d has %d replies", p.ID, len(discussionData.Replies))
 
-			// // Пропускаем, если этот же аккаунт уже комментировал (FromID == selfID)
-			// skip := false
-			// for _, r := range discussionData.Replies {
-			// 	if peer, ok := r.FromID.(*tg.PeerUser); ok {
-			// 		log.Printf("[DEBUG] reply from userID=%d", peer.UserID)
-			// 		if peer.UserID == selfID {
-			// 			log.Printf("[DEBUG] post %d already commented by selfID=%d", p.ID, selfID)
-			// 			skip = true
-			// 			break
-			// 		}
-			// 	}
-			// }
-			// if skip {
-			// 	log.Printf("[DEBUG] skipping post %d", p.ID)
-			// 	continue
-			// }
+			if hasRecentOwnComments(discussionData.Replies, ourIDs, 30) {
+				log.Printf("[DEBUG] пропуск поста %d: уже содержит наш комментарий", p.ID)
+				continue
+			}
 
-			// выбираем первый попавшийся пост
-			log.Printf("[DEBUG] selected post %d for commenting (self-check disabled)", p.ID)
+			// log.Printf("[DEBUG] выбран пост %d для комментирования", p.ID)
+
 			found = true
 			break
 		}
@@ -134,7 +113,7 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 
 		// Подписываемся на группу обсуждения (в ней будут видны ответы)
 		if errJoinDisc := module.Modf_JoinChannel(ctx, api, discussionData.Chat); errJoinDisc != nil {
-			log.Printf("[ERROR] Failed to join discussion group: ID=%d Err=%v",
+			log.Printf("[ERROR] Не удалось присоединиться к чату обсуждений: ID=%d Ошибка=%v",
 				discussionData.Chat.ID, errJoinDisc)
 		}
 
@@ -145,6 +124,23 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 		}, replyToMsgID)
 
 	})
+}
+
+// hasRecentOwnComments проверяет последние limit комментариев и
+// возвращает true, если среди них есть комментарии наших аккаунтов.
+func hasRecentOwnComments(replies []*tg.Message, ourIDs map[int64]struct{}, limit int) bool {
+	start := 0
+	if len(replies) > limit {
+		start = len(replies) - limit
+	}
+	for _, r := range replies[start:] {
+		if peer, ok := r.FromID.(*tg.PeerUser); ok {
+			if _, exists := ourIDs[int64(peer.UserID)]; exists {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 var emojiList = []string{
@@ -178,9 +174,9 @@ func sendEmojiReply(ctx context.Context, api *tg.Client, peer *tg.InputPeerChann
 	})
 
 	if err != nil {
-		return fmt.Errorf("failed to send emoji: %w", err) // Возвращаем ошибку, если отправка не удалась
+		return fmt.Errorf("не удалось отправить эмодзи: %w", err)
 	}
 
-	log.Printf("Emoji %s sent successfully", emoji) // Логируем успешную отправку
+	log.Printf("Эмодзи %s успешно отправлен", emoji)
 	return nil
 }

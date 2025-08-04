@@ -60,15 +60,6 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 			time.Sleep(time.Duration(delay) * time.Second)
 		}
 
-		// Вместо telegram.SendComment вызываем SendReaction
-		// err := telegram.SendReaction(
-		// 	account.Phone,
-		// 	channelURL,
-		// 	account.ApiID,
-		// 	account.ApiHash,
-		// 	request.PostsCount,
-		// )
-
 		if err != nil {
 			log.Printf("Failed for %s: %v", account.Phone, err)
 			continue

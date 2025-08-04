@@ -54,6 +54,17 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 	// Счётчики успешных и неуспешных попыток
 	var successCount, errorCount int
 
+	// Получаем userID всех аккаунтов для проверки собственных комментариев
+	userIDs := make(map[int64]struct{})
+	for _, acc := range accounts {
+		id, err := telegram.GetUserID(acc.Phone, acc.ApiID, acc.ApiHash)
+		if err != nil {
+			log.Printf("[HANDLER ERROR] Failed to get user ID for %s: %v", acc.Phone, err)
+			continue
+		}
+		userIDs[id] = struct{}{}
+	}
+
 	// Инициализируем генератор случайных чисел
 	rand.Seed(time.Now().UnixNano())
 
@@ -61,7 +72,7 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		// Задержка между аккаунтами (чтобы не слишком быстро подряд)
 		if i > 0 {
 			delay := rand.Intn(10) + 6 // 6–15 секунд
-			log.Printf("[HANDLER] Account %s done. Waiting %ds before next...", accounts[i-1].Phone, delay)
+			log.Printf("[HANDLER] Аккаунт %s обработан. Ожидание %d секунд перед следующим...", accounts[i-1].Phone, delay)
 
 			for remaining := delay; remaining > 0; remaining -= 5 {
 				select {
@@ -76,7 +87,7 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 					return
 				default:
 				}
-				log.Printf("[HANDLER] %ds remaining...", remaining)
+				// log.Printf("[HANDLER] %ds remaining...", remaining)
 				time.Sleep(5 * time.Second)
 			}
 		}
@@ -95,8 +106,6 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		}
 		log.Printf("[HANDLER INFO] Selected channel for %s: %s", account.Phone, channelURL)
 
-		log.Printf("[HANDLER DEBUG] Processing account: %s", account.Phone)
-
 		// Отправка комментария в выбранный канал
 		if err := telegram.SendComment(
 			account.Phone,
@@ -104,6 +113,7 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 			account.ApiID,
 			account.ApiHash,
 			request.PostsCount,
+			userIDs,
 		); err != nil {
 			log.Printf("[HANDLER ERROR] Failed for %s: %v", account.Phone, err)
 			errorCount++
