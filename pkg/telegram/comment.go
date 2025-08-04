@@ -41,13 +41,13 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 	return client.Run(ctx, func(ctx context.Context) error {
 		api := tg.NewClient(client) // Создаем API-клиент
 
-		// запрашиваем сведения о самом себе — метод принимает InputUserClass, а не Request
-		meFull, err := api.UsersGetFullUser(ctx, &tg.InputUserSelf{})
-		if err != nil {
-			return fmt.Errorf("failed to fetch self userID: %w", err)
-		}
-		// в возвращённой структуре поле FullUser содержит данные пользователя
-		selfID := meFull.FullUser.ID
+		// // запрашиваем сведения о самом себе — метод принимает InputUserClass, а не Request
+		// meFull, err := api.UsersGetFullUser(ctx, &tg.InputUserSelf{})
+		// if err != nil {
+		// 	return fmt.Errorf("failed to fetch self userID: %w", err)
+		// }
+		// // в возвращённой структуре поле FullUser содержит данные пользователя
+		// selfID := meFull.FullUser.ID
 
 		// Получаем информацию о канале по username
 		resolved, err := api.ContactsResolveUsername(ctx, &tg.ContactsResolveUsernameRequest{
@@ -102,25 +102,25 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 			}
 			log.Printf("[DEBUG] post %d has %d replies", p.ID, len(discussionData.Replies))
 
-			// Пропускаем, если этот же аккаунт уже комментировал (FromID == selfID)
-			skip := false
-			for _, r := range discussionData.Replies {
-				if peer, ok := r.FromID.(*tg.PeerUser); ok {
-					log.Printf("[DEBUG] reply from userID=%d", peer.UserID)
-					if peer.UserID == selfID {
-						log.Printf("[DEBUG] post %d already commented by selfID=%d", p.ID, selfID)
-						skip = true
-						break
-					}
-				}
-			}
-			if skip {
-				log.Printf("[DEBUG] skipping post %d", p.ID)
-				continue
-			}
+			// // Пропускаем, если этот же аккаунт уже комментировал (FromID == selfID)
+			// skip := false
+			// for _, r := range discussionData.Replies {
+			// 	if peer, ok := r.FromID.(*tg.PeerUser); ok {
+			// 		log.Printf("[DEBUG] reply from userID=%d", peer.UserID)
+			// 		if peer.UserID == selfID {
+			// 			log.Printf("[DEBUG] post %d already commented by selfID=%d", p.ID, selfID)
+			// 			skip = true
+			// 			break
+			// 		}
+			// 	}
+			// }
+			// if skip {
+			// 	log.Printf("[DEBUG] skipping post %d", p.ID)
+			// 	continue
+			// }
 
-			// нашли «чистый» пост
-			log.Printf("[DEBUG] selected post %d for commenting", p.ID)
+			// выбираем первый попавшийся пост
+			log.Printf("[DEBUG] selected post %d for commenting (self-check disabled)", p.ID)
 			found = true
 			break
 		}
