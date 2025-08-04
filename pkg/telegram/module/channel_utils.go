@@ -64,10 +64,17 @@ func Modf_ExtractUsername(url string) (string, error) {
 func Modf_FindChannel(chats []tg.ChatClass) (*tg.Channel, error) {
 	for _, peer := range chats {
 		if ch, ok := peer.(*tg.Channel); ok {
-			return ch, nil
+			// Если канал является мегагруппой (обсуждением), пропускаем его
+			if ch.Megagroup {
+				continue
+			}
+			// Возвращаем первый найденный вещательный канал
+			if ch.Broadcast {
+				return ch, nil
+			}
 		}
 	}
-	return nil, fmt.Errorf("channel not found 206")
+	return nil, fmt.Errorf("broadcast channel not found")
 }
 
 // выбирает случайный пост из канала
