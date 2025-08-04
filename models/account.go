@@ -1,9 +1,10 @@
 package models
 
 type Account struct {
-	ID           int    `json:"id"`            // уникальный идентификатор (можно будет использовать для БД)
-	Phone        string `json:"phone"`         // номер телефона
-	ApiID        int    `json:"api_id"`        // Api ID от Telegram
-	ApiHash      string `json:"api_hash"`      // Api Hash от Telegram
-	IsAuthorized bool   `json:"is_authorized"` // статус авторизации
+	ID            int    `json:"id"`
+	Phone         string `json:"phone"`
+	ApiID         int    `json:"api_id"`
+	ApiHash       string `json:"api_hash"`
+	IsAuthorized  bool   `json:"is_authorized"`
+	PhoneCodeHash string `json:"phone_code_hash"`
 }

@@ -1,0 +1,78 @@
+package module
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/gotd/td/tg"
+)
+
+// Discussion содержит канал обсуждения и все ответы под конкретным постом
+type Discussion struct {
+	Chat        *tg.Channel
+	PostMessage *tg.Message // сообщение, соответствующее посту в канале
+	Replies     []*tg.Message
+}
+
+// Modf_getPostDiscussion получает обсуждение для указанного сообщения (поста) в канале.
+func Modf_getPostDiscussion(
+	ctx context.Context,
+	api *tg.Client,
+	channel *tg.Channel,
+	msgID int,
+) (*Discussion, error) {
+	log.Printf("[LOG] Modf_getPostDiscussion start: channelID=%d  accessHash=%d  msgID=%d",
+		channel.ID, channel.AccessHash, msgID)
+
+	// Запрашиваем информацию об обсуждении
+	discussMsg, err := api.MessagesGetDiscussionMessage(ctx, &tg.MessagesGetDiscussionMessageRequest{
+		Peer: &tg.InputPeerChannel{
+			ChannelID:  channel.ID,
+			AccessHash: channel.AccessHash,
+		},
+		MsgID: msgID,
+	})
+	if err != nil {
+		log.Printf("[LOG] MessagesGetDiscussionMessage error: %v", err)
+		return nil, fmt.Errorf("failed to get discussion: %w", err)
+	}
+
+	// 1) выбираем linkedChat — чат обсуждения, отличный от основного канала
+	var linkedChat *tg.Channel
+	for _, raw := range discussMsg.GetChats() {
+		if ch, ok := raw.(*tg.Channel); ok && ch.ID != channel.ID {
+			linkedChat = ch
+			break
+		}
+	}
+	if linkedChat == nil {
+		return nil, fmt.Errorf("discussion chat not found")
+	}
+
+	// 2) разбираем сообщения: находим сам PostMessage и собираем Replies
+	var (
+		postMsg *tg.Message
+		replies []*tg.Message
+	)
+	for _, raw := range discussMsg.GetMessages() {
+		m, ok := raw.(*tg.Message)
+		if !ok {
+			continue
+		}
+		if m.ID == msgID {
+			postMsg = m
+		} else {
+			replies = append(replies, m)
+		}
+	}
+	if postMsg == nil {
+		return nil, fmt.Errorf("discussion post message not found")
+	}
+
+	return &Discussion{
+		Chat:        linkedChat,
+		PostMessage: postMsg,
+		Replies:     replies,
+	}, nil
+}

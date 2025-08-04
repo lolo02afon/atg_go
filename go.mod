@@ -4,7 +4,7 @@ go 1.24.5
 
 require (
 	github.com/gin-gonic/gin v1.10.1
-	github.com/gotd/td v0.128.0
+	github.com/gotd/td v0.129.0
 	github.com/lib/pq v1.10.9
 )
 
@@ -39,7 +39,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
-	github.com/ogen-go/ogen v1.12.0 // indirect
+	github.com/ogen-go/ogen v1.14.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
@@ -52,7 +52,7 @@ require (
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/arch v0.8.0 // indirect
 	golang.org/x/crypto v0.40.0 // indirect
-	golang.org/x/exp v0.0.0-20230725093048-515e97ebf090 // indirect
+	golang.org/x/exp v0.0.0-20250718183923-645b1fa84792 // indirect
 	golang.org/x/mod v0.26.0 // indirect
 	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
