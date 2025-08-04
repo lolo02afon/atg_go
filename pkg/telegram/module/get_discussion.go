@@ -46,7 +46,7 @@ func Modf_getPostDiscussion(
 		return nil, fmt.Errorf("discussion chat not found")
 	}
 
-	// 2) разбираем сообщения: находим сам PostMessage и собираем Replies
+	// 2) разбираем сообщения из ответа, выбираем корневое сообщение обсуждения (которое находится в связанном чате) и остальные сообщения считаем ответами
 	var (
 		postMsg *tg.Message
 		replies []*tg.Message
@@ -56,11 +56,19 @@ func Modf_getPostDiscussion(
 		if !ok {
 			continue
 		}
-		if m.ID == msgID {
-			postMsg = m
-		} else {
-			replies = append(replies, m)
+		peer, ok := m.PeerID.(*tg.PeerChannel)
+		if !ok || peer.ChannelID != linkedChat.ID {
+			// Нас интересуют только сообщения из чата обсуждения
+			continue
 		}
+
+		if m.ReplyTo == nil {
+			// сообщение без ReplyTo — корневой пост обсуждения
+			postMsg = m
+			continue
+		}
+
+		replies = append(replies, m)
 	}
 	if postMsg == nil {
 		return nil, fmt.Errorf("discussion post message not found")
