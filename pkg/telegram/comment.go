@@ -194,7 +194,7 @@ func hasRecentCommentByUsers(ctx context.Context, api *tg.Client, channel *tg.Ch
 			continue
 		}
 		if from, ok := msg.FromID.(*tg.PeerUser); ok {
-			if _, exist := userIDs[from.UserID]; exist {
+			if _, exist := userIDs[int(from.UserID)]; exist {
 				return true, nil
 			}
 		}
