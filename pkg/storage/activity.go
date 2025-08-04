@@ -19,3 +19,15 @@ func (db *DB) HasComment(accountID, messageID int) (bool, error) {
 	).Scan(&exists)
 	return exists, err
 }
+
+// HasCommentForPost проверяет, оставлялся ли комментарий к посту любым из наших аккаунтов.
+// Возвращает true, если в таблице activity есть запись с заданными каналом и постом
+// и типом activity_type = 'comment'.
+func (db *DB) HasCommentForPost(channelID, messageID int) (bool, error) {
+	var exists bool
+	err := db.Conn.QueryRow(
+		`SELECT EXISTS(SELECT 1 FROM activity WHERE id_channel = $1 AND id_message = $2 AND activity_type = 'comment')`,
+		channelID, messageID,
+	).Scan(&exists)
+	return exists, err
+}

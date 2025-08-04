@@ -107,7 +107,7 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 				return err
 			}
 			if !allowed {
-				log.Printf("[INFO] Аккаунт %s уже комментировал пост %d — пропуск", phone, replyToMsgID)
+				log.Printf("[INFO] Пост %d уже комментирован нашими аккаунтами, пропуск для %s", replyToMsgID, phone)
 				return nil
 			}
 		}
