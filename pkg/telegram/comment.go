@@ -46,8 +46,8 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 		if err != nil {
 			return fmt.Errorf("failed to fetch self userID: %w", err)
 		}
-		// в возвращённом UserFull поле User — это *tg.User
-		selfID := meFull.User.ID
+		// в возвращённой структуре поле FullUser содержит данные пользователя
+		selfID := meFull.FullUser.ID
 
 		// Получаем информацию о канале по username
 		resolved, err := api.ContactsResolveUsername(ctx, &tg.ContactsResolveUsernameRequest{
@@ -89,7 +89,6 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 		})
 
 		var (
-			post           *tg.Message
 			discussionData *module.Discussion
 			found          bool
 		)
@@ -121,7 +120,7 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 			}
 
 			// нашли «чистый» пост
-			post, found = p, true
+			found = true
 			break
 		}
 
