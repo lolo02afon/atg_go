@@ -3,7 +3,6 @@ package main
 import (
 	"atg_go/internal/auth"
 	"atg_go/internal/comments"
-	"atg_go/internal/reaction"
 	"atg_go/pkg/storage"
 	"database/sql"
 	"log"
@@ -62,8 +61,8 @@ func setupRouter(db *storage.DB, commentDB *storage.CommentDB) *gin.Engine {
 	comments.SetupRoutes(commentGroup, db, commentDB) // Передаем оба хранилища
 
 	// Группа роутов для реакций на чужие комментарии
-	reactionGroup := r.Group("/reaction")
-	reaction.SetupRoutes(reactionGroup, db, commentDB)
+	// reactionGroup := r.Group("/reaction")
+	// reaction.SetupRoutes(reactionGroup, db, commentDB)
 
 	// Группа роутов для telegram-модуля
 	// telegramGroup := r.Group("/module")

@@ -82,7 +82,7 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		}
 
 		// --- НОВАЯ ЛОГИКА: выбор канала для каждого аккаунта ---
-		channelURL, err := h.CommentDB.GetRandomChannel()
+		channelID, channelURL, err := h.CommentDB.GetRandomChannelWithID()
 		if errors.Is(err, sql.ErrNoRows) {
 			log.Printf("[HANDLER ERROR] No channels available: %v", err)
 			c.JSON(http.StatusNotFound, gin.H{"error": "No channels available"})
@@ -108,6 +108,8 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 			continue
 		}
 
+		h.recordComment(account.ID, channelID, 0)
+
 		successCount++
 		log.Printf("[HANDLER DEBUG] Success for account: %s", account.Phone)
 	}
@@ -121,4 +123,10 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 	}
 	log.Printf("[HANDLER INFO] Final result: %+v", result)
 	c.JSON(http.StatusOK, result)
+}
+
+func (h *CommentHandler) recordComment(accountID, channelID, messageID int) {
+	if err := h.DB.SaveActivity(accountID, channelID, messageID, "comment"); err != nil {
+		log.Printf("Failed to save activity for account %d: %v", accountID, err)
+	}
 }

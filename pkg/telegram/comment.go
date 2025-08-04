@@ -61,31 +61,23 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 				channel.ID, channel.AccessHash, errJoinChannel)
 		}
 
-		// 1️⃣ Запрашиваем пул постов один раз
-		historyLimit := postsCount * 3
-		if historyLimit < 10 {
-			historyLimit = 10
+		// 1️⃣ Запрашиваем только последние postsCount постов
+		// чтобы не уходить глубоко в историю канала
+		if postsCount < 1 {
+			postsCount = 1
 		}
-		posts, err := module.GetChannelPosts(ctx, api, channel, historyLimit)
+		posts, err := module.GetChannelPosts(ctx, api, channel, postsCount)
 		if err != nil {
 			return fmt.Errorf("не удалось получить историю канала: %w", err)
 		}
-
-		// 2️⃣ Перемешиваем и проверяем первые postsCount
-		rand.Shuffle(len(posts), func(i, j int) {
-			posts[i], posts[j] = posts[j], posts[i]
-		})
 
 		var (
 			discussionData *module.Discussion
 			found          bool
 		)
 
-		//  Перемешали и будем искать первый пост, под которым нет комментариев наших ботов
-		for i, p := range posts {
-			if i >= postsCount {
-				break
-			}
+		//  Проходим по последним постам в порядке от новых к старым
+		for _, p := range posts {
 			discussionData, err = module.Modf_getPostDiscussion(ctx, api, channel, p.ID)
 			if err != nil {
 				// просто пропускаем этот пост и идём дальше

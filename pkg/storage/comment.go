@@ -65,3 +65,47 @@ func (cdb *CommentDB) GetRandomChannel() (string, error) {
 
 	return url, nil
 }
+
+// возвращает идентификатор и случайный URL канала
+func (cdb *CommentDB) GetRandomChannelWithID() (int, string, error) {
+	var channel models.Channel
+
+	var count int
+	err := cdb.Conn.QueryRow("SELECT COUNT(*) FROM channels").Scan(&count)
+	if err != nil {
+		log.Printf("[DB ERROR] Channel count failed: %v", err)
+		return 0, "", err
+	}
+	if count == 0 {
+		return 0, "", sql.ErrNoRows
+	}
+
+	rand.Seed(time.Now().UnixNano())
+	offset := rand.Intn(count)
+
+	row := cdb.Conn.QueryRow(`
+        SELECT id, name, urls
+        FROM channels
+        LIMIT 1 OFFSET $1
+    `, offset)
+
+	var urlsJSON []byte
+	if err := row.Scan(&channel.ID, &channel.Name, &urlsJSON); err != nil {
+		log.Printf("[DB ERROR] Channel scan failed: %v", err)
+		return 0, "", err
+	}
+
+	if err := json.Unmarshal(urlsJSON, &channel.URLs); err != nil {
+		log.Printf("[DB ERROR] URL parsing failed: %v", err)
+		return 0, "", err
+	}
+
+	if len(channel.URLs) == 0 {
+		return 0, "", sql.ErrNoRows
+	}
+
+	url := channel.URLs[rand.Intn(len(channel.URLs))]
+	log.Printf("[DB] Selected channel: %s from group '%s'", url, channel.Name)
+
+	return channel.ID, url, nil
+}

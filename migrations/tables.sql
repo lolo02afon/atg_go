@@ -15,3 +15,12 @@ CREATE TABLE IF NOT EXISTS channels (
     name TEXT NOT NULL,              -- Произвольное название группы каналов
     urls JSONB NOT NULL              -- Массив URL в формате ["https://t.me/channel1", "https://t.me/channel2"]
 );
+
+-- Таблица активности аккаунтов
+CREATE TABLE IF NOT EXISTS activity (
+    id SERIAL PRIMARY KEY,
+    id_account INTEGER NOT NULL,
+    id_channel INTEGER NOT NULL,
+    id_message INTEGER NOT NULL,
+    activity_type TEXT NOT NULL
+);
