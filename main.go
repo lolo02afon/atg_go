@@ -3,6 +3,7 @@ package main
 import (
 	"atg_go/internal/auth"
 	"atg_go/internal/comments"
+	module "atg_go/internal/module"
 	"atg_go/pkg/storage"
 	"database/sql"
 	"log"
@@ -65,8 +66,8 @@ func setupRouter(db *storage.DB, commentDB *storage.CommentDB) *gin.Engine {
 	// reaction.SetupRoutes(reactionGroup, db, commentDB)
 
 	// Группа роутов для telegram-модуля
-	// telegramGroup := r.Group("/module")
-	// telegramModule.SetupRoutes(telegramGroup)
+	moduleGroup := r.Group("/module")
+	module.SetupRoutes(moduleGroup)
 
 	// Health check endpoint
 	r.GET("/health", func(c *gin.Context) {
@@ -77,6 +78,7 @@ func setupRouter(db *storage.DB, commentDB *storage.CommentDB) *gin.Engine {
 	log.Printf("[ROUTER] Routes initialized:")
 	log.Printf("[ROUTER] POST /auth/CreateAccount")
 	log.Printf("[ROUTER] POST /comment/send")
+	log.Printf("[ROUTER] POST /module/dispatcher_activity")
 	log.Printf("[ROUTER] GET /health")
 
 	return r

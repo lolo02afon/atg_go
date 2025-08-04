@@ -6,14 +6,13 @@ import (
 	"time"
 )
 
-// ModF_DispatcherActivity запускает отправку комментариев каждые 30 секунд
-// на протяжении двух циклов.
-func ModF_DispatcherActivity() {
+// ModF_DispatcherActivity запускает отправку комментариев с заданным интервалом.
+func ModF_DispatcherActivity(interval time.Duration, repeat int) {
 	payload := []byte(`{"posts_count":5}`)
-	for i := 0; i < 2; i++ {
+	for i := 0; i < repeat; i++ {
 		http.Post("http://localhost:8080/comment/send", "application/json", bytes.NewBuffer(payload))
-		if i < 1 {
-			time.Sleep(30 * time.Second)
+		if i < repeat-1 {
+			time.Sleep(interval)
 		}
 	}
 }
