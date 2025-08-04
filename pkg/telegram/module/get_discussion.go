@@ -22,8 +22,6 @@ func Modf_getPostDiscussion(
 	channel *tg.Channel,
 	msgID int,
 ) (*Discussion, error) {
-	log.Printf("[LOG] Modf_getPostDiscussion start: channelID=%d  accessHash=%d  msgID=%d",
-		channel.ID, channel.AccessHash, msgID)
 
 	// Запрашиваем информацию об обсуждении
 	discussMsg, err := api.MessagesGetDiscussionMessage(ctx, &tg.MessagesGetDiscussionMessageRequest{
@@ -34,7 +32,6 @@ func Modf_getPostDiscussion(
 		MsgID: msgID,
 	})
 	if err != nil {
-		log.Printf("[LOG] MessagesGetDiscussionMessage error: %v", err)
 		return nil, fmt.Errorf("failed to get discussion: %w", err)
 	}
 
