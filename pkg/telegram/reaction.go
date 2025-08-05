@@ -78,9 +78,11 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 			return fmt.Errorf("не удалось получить сообщения обсуждения: %w", err)
 		}
 
-		// Берём самое последнее сообщение из обсуждения
-		// (если сообщений нет, функция GetDiscussionReplies вернёт ошибку)
-		targetMsg := messages[len(messages)-1]
+		// Определяем сообщение, которому нужно поставить реакцию
+		targetMsg, err := selectTargetMessage(messages)
+		if err != nil {
+			return err
+		}
 
 		// Ставим реакцию на найденное сообщение
 		reaction := getRandomReaction(allowedReactions)
@@ -95,7 +97,6 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 		}
 		reactedMsgID = targetMsg.ID
 		log.Printf("Реакция %s успешно отправлена", reaction)
-
 		return nil
 	})
 
@@ -108,4 +109,14 @@ var reactionList = []string{"❤️", "😂"}
 func getRandomReaction(reactions []string) string {
 	rand.Seed(time.Now().UnixNano())
 	return reactions[rand.Intn(len(reactions))]
+}
+
+// selectTargetMessage выбирает сообщение для отправки реакции.
+// Всегда возвращает последнее сообщение из списка, если он не пуст.
+// В противном случае возвращает ошибку.
+func selectTargetMessage(messages []*tg.Message) (*tg.Message, error) {
+	if len(messages) == 0 {
+		return nil, fmt.Errorf("нет сообщений для реакции")
+	}
+	return messages[len(messages)-1], nil
 }
