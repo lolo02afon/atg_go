@@ -18,8 +18,9 @@ func NewHandler() *Handler { return &Handler{} }
 // DispatcherActivity запускает модульную активность диспатчера.
 func (h *Handler) DispatcherActivity(c *gin.Context) {
 	var req struct {
-		Time   int `json:"time" binding:"required"`
-		Repeat int `json:"repeat" binding:"required"`
+		Time            int                              `json:"time" binding:"required"`
+		Repeat          int                              `json:"repeat" binding:"required"`
+		ActivityRequest []telegrammodule.ActivityRequest `json:"activity_request" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -27,7 +28,7 @@ func (h *Handler) DispatcherActivity(c *gin.Context) {
 		return
 	}
 
-	telegrammodule.ModF_DispatcherActivity(time.Duration(req.Time)*time.Second, req.Repeat)
+	telegrammodule.ModF_DispatcherActivity(time.Duration(req.Time)*time.Second, req.Repeat, req.ActivityRequest)
 
 	c.JSON(http.StatusOK, gin.H{"status": "completed"})
 }

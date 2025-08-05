@@ -2,15 +2,24 @@ package module
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"time"
 )
 
-// ModF_DispatcherActivity запускает отправку комментариев с заданным интервалом.
-func ModF_DispatcherActivity(interval time.Duration, repeat int) {
-	payload := []byte(`{"posts_count":5}`)
+// ActivityRequest описывает один запрос активности с адресом и параметрами.
+type ActivityRequest struct {
+	URL        string `json:"url"`
+	PostsCount int    `json:"posts_count"`
+}
+
+// ModF_DispatcherActivity выполняет указанные запросы с заданным интервалом и количеством повторений.
+func ModF_DispatcherActivity(interval time.Duration, repeat int, activities []ActivityRequest) {
 	for i := 0; i < repeat; i++ {
-		http.Post("http://localhost:8080/comment/send", "application/json", bytes.NewBuffer(payload))
+		for _, act := range activities {
+			payload, _ := json.Marshal(map[string]int{"posts_count": act.PostsCount})
+			http.Post(act.URL, "application/json", bytes.NewBuffer(payload))
+		}
 		if i < repeat-1 {
 			time.Sleep(interval)
 		}
