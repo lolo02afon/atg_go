@@ -6,7 +6,7 @@ import (
 	"github.com/gotd/td/tg"
 )
 
-// TestSelectTargetMessage_NewestMessage проверяет, что выбирается самое новое сообщение.
+// TestSelectTargetMessage_NewestMessage проверяет, что выбирается самое новое сообщение без реакций.
 func TestSelectTargetMessage_NewestMessage(t *testing.T) {
 	msgs := []*tg.Message{{ID: 3}, {ID: 2}, {ID: 1}}
 	msg, err := selectTargetMessage(msgs)
@@ -25,10 +25,11 @@ func TestSelectTargetMessage_Empty(t *testing.T) {
 	}
 }
 
-// TestSelectTargetMessage_IgnoresReactions убеждается, что наличие реакций не влияет на выбор.
-func TestSelectTargetMessage_IgnoresReactions(t *testing.T) {
+// TestSelectTargetMessage_SkipReactions убеждается, что сообщения с реакциями пропускаются.
+func TestSelectTargetMessage_SkipReactions(t *testing.T) {
 	msgs := []*tg.Message{
-		{ID: 2, Reactions: tg.MessageReactions{Results: []tg.ReactionCount{{Reaction: &tg.ReactionEmoji{Emoticon: "❤️"}, Count: 1}}}},
+		{ID: 3, Reactions: tg.MessageReactions{Results: []tg.ReactionCount{{Reaction: &tg.ReactionEmoji{Emoticon: "❤️"}, Count: 1}}}},
+		{ID: 2},
 		{ID: 1},
 	}
 	msg, err := selectTargetMessage(msgs)
@@ -37,5 +38,16 @@ func TestSelectTargetMessage_IgnoresReactions(t *testing.T) {
 	}
 	if msg.ID != 2 {
 		t.Fatalf("ожидался ID 2, получено %d", msg.ID)
+	}
+}
+
+// TestSelectTargetMessage_AllWithReactions проверяет, что возвращается ошибка, если все сообщения уже с реакциями.
+func TestSelectTargetMessage_AllWithReactions(t *testing.T) {
+	msgs := []*tg.Message{
+		{ID: 2, Reactions: tg.MessageReactions{Results: []tg.ReactionCount{{Reaction: &tg.ReactionEmoji{Emoticon: "❤️"}, Count: 1}}}},
+		{ID: 1, Reactions: tg.MessageReactions{Results: []tg.ReactionCount{{Reaction: &tg.ReactionEmoji{Emoticon: "😂"}, Count: 1}}}},
+	}
+	if _, err := selectTargetMessage(msgs); err == nil {
+		t.Fatalf("ожидалась ошибка, но её нет")
 	}
 }

@@ -134,13 +134,19 @@ func removeReaction(list []string, r string) []string {
 	return list
 }
 
-// selectTargetMessage выбирает самое новое сообщение для отправки реакции.
-// MessagesGetHistory возвращает сообщения в порядке от новых к старым,
-// поэтому достаточно взять первый элемент списка.
-// В противном случае возвращает ошибку.
+// selectTargetMessage выбирает самое новое сообщение без реакций.
+// MessagesGetHistory возвращает сообщения от новых к старым,
+// поэтому проходим по списку и ищем первое сообщение,
+// у которого отсутствуют реакции. Если все сообщения уже
+// содержат реакции, возвращаем ошибку.
 func selectTargetMessage(messages []*tg.Message) (*tg.Message, error) {
 	if len(messages) == 0 {
 		return nil, fmt.Errorf("нет сообщений для реакции")
 	}
-	return messages[0], nil
+	for _, m := range messages {
+		if len(m.Reactions.Results) == 0 {
+			return m, nil
+		}
+	}
+	return nil, fmt.Errorf("подходящее сообщение без реакций не найдено")
 }
