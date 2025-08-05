@@ -73,7 +73,8 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 			return fmt.Errorf("нет доступных реакций в чате")
 		}
 
-		// Запрашиваем чуть больше сообщений, чтобы исключить служебный пост канала
+		// Запрашиваем последние сообщения из обсуждения
+		// Берём на одно больше, чтобы компенсировать возможный служебный пост
 		messages, err := module.GetChannelPosts(ctx, api, discussion.Chat, msgCount+1)
 		if err != nil {
 			return fmt.Errorf("не удалось получить сообщения обсуждения: %w", err)
@@ -84,6 +85,9 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 			idSet[id] = struct{}{}
 		}
 
+		var lastUserMsg *tg.Message
+
+		// Сначала ищем последнее сообщение без реакций
 		for _, msg := range messages {
 			// Пропускаем сообщения без автора-пользователя (например, пост канала или служебные сообщения)
 			from, ok := msg.FromID.(*tg.PeerUser)
@@ -95,28 +99,47 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 				continue
 			}
 
-			// Пропускаем сообщения, которые уже имеют реакции
-			if len(msg.Reactions.Results) > 0 {
-				continue
+			// Сохраняем первое подходящее сообщение для fallback
+			if lastUserMsg == nil {
+				lastUserMsg = msg
 			}
 
+			// Отправляем реакцию, если у сообщения нет других реакций
+			if len(msg.Reactions.Results) == 0 {
+				reaction := getRandomReaction(allowedReactions)
+				_, err := api.MessagesSendReaction(ctx, &tg.MessagesSendReactionRequest{
+					Peer:        &tg.InputPeerChannel{ChannelID: discussion.Chat.ID, AccessHash: discussion.Chat.AccessHash},
+					MsgID:       msg.ID,
+					Reaction:    []tg.ReactionClass{&tg.ReactionEmoji{Emoticon: reaction}},
+					AddToRecent: true,
+				})
+				if err != nil {
+					return fmt.Errorf("не удалось отправить реакцию: %w", err)
+				}
+				reactedMsgID = msg.ID
+				log.Printf("Реакция %s успешно отправлена", reaction)
+				return nil
+			}
+		}
+
+		// Если все сообщения уже имеют реакции, реагируем на первое подходящее
+		if lastUserMsg != nil {
 			reaction := getRandomReaction(allowedReactions)
-      
 			_, err := api.MessagesSendReaction(ctx, &tg.MessagesSendReactionRequest{
 				Peer:        &tg.InputPeerChannel{ChannelID: discussion.Chat.ID, AccessHash: discussion.Chat.AccessHash},
-				MsgID:       msg.ID,
+				MsgID:       lastUserMsg.ID,
 				Reaction:    []tg.ReactionClass{&tg.ReactionEmoji{Emoticon: reaction}},
 				AddToRecent: true,
 			})
 			if err != nil {
 				return fmt.Errorf("не удалось отправить реакцию: %w", err)
 			}
-			reactedMsgID = msg.ID
+			reactedMsgID = lastUserMsg.ID
 			log.Printf("Реакция %s успешно отправлена", reaction)
 			return nil
 		}
 
-		log.Printf("[INFO] Не найдено сообщения без реакций в обсуждении")
+		log.Printf("[INFO] Не найдено подходящих сообщений в обсуждении")
 		return nil
 	})
 
