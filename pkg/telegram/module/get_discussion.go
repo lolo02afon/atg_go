@@ -101,15 +101,41 @@ func Modf_getDiscussionChat(ctx context.Context, api *tg.Client, channel *tg.Cha
 		return nil, fmt.Errorf("у канала нет чата обсуждения")
 	}
 
-	// Получаем сам чат обсуждения по его ID
-	chats, err := api.MessagesGetChats(ctx, []int64{fullChat.LinkedChatID})
-	if err != nil {
-		return nil, fmt.Errorf("не удалось получить чат обсуждения: %w", err)
-	}
-	for _, raw := range chats.GetChats() {
+	// Извлекаем объект обсуждения из full.GetChats, чтобы получить access hash
+	var discussion *tg.Channel
+	for _, raw := range full.GetChats() {
 		if ch, ok := raw.(*tg.Channel); ok && ch.ID == fullChat.LinkedChatID {
+			discussion = ch
+			break
+		}
+	}
+	if discussion == nil {
+		return nil, fmt.Errorf("не удалось найти чат обсуждения")
+	}
+
+	// Получаем подробную информацию о чате обсуждения
+	chats, err := api.ChannelsGetChannels(ctx, []tg.InputChannelClass{&tg.InputChannel{ChannelID: discussion.ID, AccessHash: discussion.AccessHash}})
+	if err != nil {
+		if tg.IsChannelPrivate(err) || tg.IsChannelParicipantMissing(err) {
+			// Присоединяемся к чату и пробуем ещё раз
+			if _, joinErr := api.ChannelsJoinChannel(ctx, &tg.InputChannel{ChannelID: discussion.ID, AccessHash: discussion.AccessHash}); joinErr != nil {
+				return nil, fmt.Errorf("не удалось присоединиться к чату обсуждения: %w", joinErr)
+			}
+
+			chats, err = api.ChannelsGetChannels(ctx, []tg.InputChannelClass{&tg.InputChannel{ChannelID: discussion.ID, AccessHash: discussion.AccessHash}})
+			if err != nil {
+				return nil, fmt.Errorf("не удалось получить чат обсуждения после присоединения: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("не удалось получить чат обсуждения: %w", err)
+		}
+	}
+
+	for _, raw := range chats.GetChats() {
+		if ch, ok := raw.(*tg.Channel); ok && ch.ID == discussion.ID {
 			return ch, nil
 		}
 	}
+
 	return nil, fmt.Errorf("чат обсуждения не найден")
 }
