@@ -29,7 +29,7 @@ func TestSelectTargetMessage_Empty(t *testing.T) {
 func TestSelectTargetMessage_IgnoresReactions(t *testing.T) {
 	msgs := []*tg.Message{
 		{ID: 1},
-		{ID: 2, Reactions: &tg.MessageReactions{Results: []tg.ReactionCount{{Reaction: &tg.ReactionEmoji{Emoticon: "❤️"}, Count: 1}}}},
+		{ID: 2, Reactions: tg.MessageReactions{Results: []tg.ReactionCount{{Reaction: &tg.ReactionEmoji{Emoticon: "❤️"}, Count: 1}}}},
 	}
 	msg, err := selectTargetMessage(msgs)
 	if err != nil {

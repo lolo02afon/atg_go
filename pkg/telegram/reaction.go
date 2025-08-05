@@ -87,21 +87,30 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 		}
 		log.Printf("[DEBUG] Целевое сообщение ID=%d", targetMsg.ID)
 
-		// Ставим реакцию на найденное сообщение
-		reaction := getRandomReaction(allowedReactions)
-		log.Printf("[DEBUG] Отправляем реакцию %s", reaction)
-		_, err = api.MessagesSendReaction(ctx, &tg.MessagesSendReactionRequest{
-			Peer:        &tg.InputPeerChannel{ChannelID: discussionChat.ID, AccessHash: discussionChat.AccessHash},
-			MsgID:       targetMsg.ID,
-			Reaction:    []tg.ReactionClass{&tg.ReactionEmoji{Emoticon: reaction}},
-			AddToRecent: true,
-		})
-		if err != nil {
+		// Ставим реакцию на найденное сообщение.
+		// Если выбранная реакция недопустима, пробуем остальные.
+		for len(allowedReactions) > 0 {
+			reaction := getRandomReaction(allowedReactions)
+			log.Printf("[DEBUG] Отправляем реакцию %s", reaction)
+			_, err = api.MessagesSendReaction(ctx, &tg.MessagesSendReactionRequest{
+				Peer:        &tg.InputPeerChannel{ChannelID: discussionChat.ID, AccessHash: discussionChat.AccessHash},
+				MsgID:       targetMsg.ID,
+				Reaction:    []tg.ReactionClass{&tg.ReactionEmoji{Emoticon: reaction}},
+				AddToRecent: true,
+			})
+			if err == nil {
+				reactedMsgID = targetMsg.ID
+				log.Printf("Реакция %s успешно отправлена", reaction)
+				return nil
+			}
+			if tg.IsReactionInvalid(err) {
+				log.Printf("[WARN] Реакция %s недопустима: %v", reaction, err)
+				allowedReactions = removeReaction(allowedReactions, reaction)
+				continue
+			}
 			return fmt.Errorf("не удалось отправить реакцию: %w", err)
 		}
-		reactedMsgID = targetMsg.ID
-		log.Printf("Реакция %s успешно отправлена", reaction)
-		return nil
+		return fmt.Errorf("не удалось отправить ни одну допустимую реакцию")
 	})
 
 	return reactedMsgID, err
@@ -113,6 +122,16 @@ var reactionList = []string{"❤️", "😂"}
 func getRandomReaction(reactions []string) string {
 	rand.Seed(time.Now().UnixNano())
 	return reactions[rand.Intn(len(reactions))]
+}
+
+// removeReaction удаляет указанную реакцию из слайса.
+func removeReaction(list []string, r string) []string {
+	for i, v := range list {
+		if v == r {
+			return append(list[:i], list[i+1:]...)
+		}
+	}
+	return list
 }
 
 // selectTargetMessage выбирает сообщение для отправки реакции.
