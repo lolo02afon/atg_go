@@ -59,17 +59,6 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 
 	rand.Seed(time.Now().UnixNano())
 
-	// Собираем ID наших аккаунтов, чтобы не реагировать на свои сообщения
-	var userIDs []int
-	for _, acc := range accounts {
-		id, err := telegram.GetUserID(acc.Phone, acc.ApiID, acc.ApiHash)
-		if err != nil {
-			log.Printf("[HANDLER WARN] Не удалось получить ID для %s: %v", acc.Phone, err)
-			continue
-		}
-		userIDs = append(userIDs, id)
-	}
-
 	for i, account := range accounts {
 		// Задержка между аккаунтами
 		if i > 0 {
@@ -112,7 +101,6 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 			account.ApiID,
 			account.ApiHash,
 			request.MsgCount,
-			userIDs,
 		)
 		if err != nil {
 			log.Printf("[HANDLER ERROR] Ошибка отправки реакции для %s: %v", account.Phone, err)
