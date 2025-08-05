@@ -64,6 +64,15 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 			log.Printf("[ERROR] Не удалось вступить в чат обсуждения: ID=%d Ошибка=%v", discussion.Chat.ID, errJoin)
 		}
 
+		// Получаем список разрешённых реакций
+		allowedReactions, err := module.GetAllowedReactions(ctx, api, discussion.Chat, reactionList)
+		if err != nil {
+			return fmt.Errorf("не удалось получить доступные реакции: %w", err)
+		}
+		if len(allowedReactions) == 0 {
+			return fmt.Errorf("нет доступных реакций в чате")
+		}
+
 		messages, err := module.GetChannelPosts(ctx, api, discussion.Chat, msgCount)
 		if err != nil {
 			return fmt.Errorf("не удалось получить сообщения обсуждения: %w", err)
@@ -87,7 +96,8 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 				continue
 			}
 
-			reaction := getRandomReaction()
+			reaction := getRandomReaction(allowedReactions)
+      
 			_, err := api.MessagesSendReaction(ctx, &tg.MessagesSendReactionRequest{
 				Peer:        &tg.InputPeerChannel{ChannelID: discussion.Chat.ID, AccessHash: discussion.Chat.AccessHash},
 				MsgID:       msg.ID,
@@ -110,8 +120,8 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 
 var reactionList = []string{"❤️", "😂"}
 
-// getRandomReaction возвращает случайную реакцию из списка reactionList.
-func getRandomReaction() string {
+// getRandomReaction возвращает случайную реакцию из переданного списка.
+func getRandomReaction(reactions []string) string {
 	rand.Seed(time.Now().UnixNano())
-	return reactionList[rand.Intn(len(reactionList))]
+	return reactions[rand.Intn(len(reactions))]
 }
