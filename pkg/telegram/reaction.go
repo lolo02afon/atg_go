@@ -73,9 +73,8 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 			return fmt.Errorf("нет доступных реакций в чате")
 		}
 
-		// Запрашиваем последние сообщения из обсуждения
-		// Берём на одно больше, чтобы компенсировать возможный служебный пост
-		messages, err := module.GetChannelPosts(ctx, api, discussion.Chat, msgCount+1)
+		// Запрашиваем последние сообщения из обсуждения поста
+		messages, err := module.GetDiscussionReplies(ctx, api, discussion.Chat, discussion.PostMessage.ID, msgCount)
 		if err != nil {
 			return fmt.Errorf("не удалось получить сообщения обсуждения: %w", err)
 		}
@@ -87,8 +86,9 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 
 		var lastUserMsg *tg.Message
 
-		// Сначала ищем последнее сообщение без реакций
-		for _, msg := range messages {
+		// Идём от последних сообщений к более ранним
+		for i := len(messages) - 1; i >= 0; i-- {
+			msg := messages[i]
 			// Пропускаем сообщения без автора-пользователя (например, пост канала или служебные сообщения)
 			from, ok := msg.FromID.(*tg.PeerUser)
 			if !ok {
