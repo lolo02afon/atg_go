@@ -14,7 +14,7 @@ import (
 
 // SendReaction выполняет добавление реакции к последнему сообщению обсуждения
 // канала. Возвращает ID сообщения, к которому была добавлена реакция.
-func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount int, userIDs []int) (int, error) {
+func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount int) (int, error) {
 	log.Printf("[START] Отправка реакции в канал %s от имени %s", channelURL, phone)
 
 	username, err := module.Modf_ExtractUsername(channelURL)
@@ -78,48 +78,24 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 			return fmt.Errorf("не удалось получить сообщения обсуждения: %w", err)
 		}
 
-		idSet := make(map[int]struct{}, len(userIDs))
-		for _, id := range userIDs {
-			idSet[id] = struct{}{}
-		}
+		// Берём самое последнее сообщение из обсуждения
+		// (если сообщений нет, функция GetDiscussionReplies вернёт ошибку)
+		targetMsg := messages[len(messages)-1]
 
-		// Ищем последнее сообщение, отправленное не нашим аккаунтом
-		var targetMsg *tg.Message
-		for i := len(messages) - 1; i >= 0; i-- {
-			msg := messages[i]
-			// Пропускаем сообщения без автора-пользователя (например, пост канала или служебные сообщения)
-			from, ok := msg.FromID.(*tg.PeerUser)
-			if !ok {
-				continue
-			}
-			// Пропускаем сообщения наших аккаунтов
-			if _, exists := idSet[int(from.UserID)]; exists {
-				continue
-			}
-			// Нашли подходящее сообщение
-			targetMsg = msg
-			break
+		// Ставим реакцию на найденное сообщение
+		reaction := getRandomReaction(allowedReactions)
+		_, err = api.MessagesSendReaction(ctx, &tg.MessagesSendReactionRequest{
+			Peer:        &tg.InputPeerChannel{ChannelID: discussion.Chat.ID, AccessHash: discussion.Chat.AccessHash},
+			MsgID:       targetMsg.ID,
+			Reaction:    []tg.ReactionClass{&tg.ReactionEmoji{Emoticon: reaction}},
+			AddToRecent: true,
+		})
+		if err != nil {
+			return fmt.Errorf("не удалось отправить реакцию: %w", err)
 		}
+		reactedMsgID = targetMsg.ID
+		log.Printf("Реакция %s успешно отправлена", reaction)
 
-		// Если нашли подходящее сообщение, ставим реакцию
-		if targetMsg != nil {
-			reaction := getRandomReaction(allowedReactions)
-			_, err := api.MessagesSendReaction(ctx, &tg.MessagesSendReactionRequest{
-				Peer:        &tg.InputPeerChannel{ChannelID: discussion.Chat.ID, AccessHash: discussion.Chat.AccessHash},
-				MsgID:       targetMsg.ID,
-				Reaction:    []tg.ReactionClass{&tg.ReactionEmoji{Emoticon: reaction}},
-				AddToRecent: true,
-			})
-			if err != nil {
-				return fmt.Errorf("не удалось отправить реакцию: %w", err)
-			}
-			reactedMsgID = targetMsg.ID
-			log.Printf("Реакция %s успешно отправлена", reaction)
-			return nil
-		}
-
-		// Если не удалось найти подходящее сообщение
-		log.Printf("[INFO] Не найдено подходящих сообщений в обсуждении")
 		return nil
 	})
 
