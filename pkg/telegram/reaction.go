@@ -73,7 +73,8 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 			return fmt.Errorf("нет доступных реакций в чате")
 		}
 
-		messages, err := module.GetChannelPosts(ctx, api, discussion.Chat, msgCount)
+		// Запрашиваем чуть больше сообщений, чтобы исключить служебный пост канала
+		messages, err := module.GetChannelPosts(ctx, api, discussion.Chat, msgCount+1)
 		if err != nil {
 			return fmt.Errorf("не удалось получить сообщения обсуждения: %w", err)
 		}
@@ -84,11 +85,14 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 		}
 
 		for _, msg := range messages {
+			// Пропускаем сообщения без автора-пользователя (например, пост канала или служебные сообщения)
+			from, ok := msg.FromID.(*tg.PeerUser)
+			if !ok {
+				continue
+			}
 			// Пропускаем сообщения наших аккаунтов
-			if from, ok := msg.FromID.(*tg.PeerUser); ok {
-				if _, exists := idSet[int(from.UserID)]; exists {
-					continue
-				}
+			if _, exists := idSet[int(from.UserID)]; exists {
+				continue
 			}
 
 			// Пропускаем сообщения, которые уже имеют реакции
@@ -112,7 +116,8 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 			return nil
 		}
 
-		return fmt.Errorf("не найдено сообщения без реакций")
+		log.Printf("[INFO] Не найдено сообщения без реакций в обсуждении")
+		return nil
 	})
 
 	return reactedMsgID, err
