@@ -80,3 +80,36 @@ func Modf_getPostDiscussion(
 		Replies:     replies,
 	}, nil
 }
+
+// Modf_getDiscussionChat возвращает чат обсуждения, связанный с каналом.
+// Функция не привязана к конкретному посту и просто ищет связанный чат.
+func Modf_getDiscussionChat(ctx context.Context, api *tg.Client, channel *tg.Channel) (*tg.Channel, error) {
+	// Запрашиваем полную информацию о канале, чтобы узнать ID связанного чата
+	full, err := api.ChannelsGetFullChannel(ctx, &tg.InputChannel{
+		ChannelID:  channel.ID,
+		AccessHash: channel.AccessHash,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("не удалось получить данные канала: %w", err)
+	}
+
+	fullChat, ok := full.GetFullChat().(*tg.ChannelFull)
+	if !ok {
+		return nil, fmt.Errorf("неожиданный тип полного канала")
+	}
+	if fullChat.LinkedChatID == 0 {
+		return nil, fmt.Errorf("у канала нет чата обсуждения")
+	}
+
+	// Получаем сам чат обсуждения по его ID
+	chats, err := api.MessagesGetChats(ctx, []int64{fullChat.LinkedChatID})
+	if err != nil {
+		return nil, fmt.Errorf("не удалось получить чат обсуждения: %w", err)
+	}
+	for _, raw := range chats.GetChats() {
+		if ch, ok := raw.(*tg.Channel); ok && ch.ID == fullChat.LinkedChatID {
+			return ch, nil
+		}
+	}
+	return nil, fmt.Errorf("чат обсуждения не найден")
+}
