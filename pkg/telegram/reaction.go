@@ -40,54 +40,58 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 			return fmt.Errorf("не удалось распознать канал: %w", err)
 		}
 
+		// Находим сам канал по username
 		channel, err := module.Modf_FindChannel(resolved.GetChats())
 		if err != nil {
 			return err
 		}
+		log.Printf("[DEBUG] Найден канал ID=%d", channel.ID)
 
+		// Пытаемся вступить в канал, чтобы иметь доступ к обсуждению
 		if errJoin := module.Modf_JoinChannel(ctx, api, channel); errJoin != nil {
 			log.Printf("[ERROR] Не удалось вступить в канал: ID=%d Ошибка=%v", channel.ID, errJoin)
 		}
 
-		posts, err := module.GetChannelPosts(ctx, api, channel, 1)
+		// Получаем чат обсуждения, не завязанный на конкретный пост
+		discussionChat, err := module.Modf_getDiscussionChat(ctx, api, channel)
 		if err != nil {
-			return fmt.Errorf("не удалось получить посты канала: %w", err)
+			return fmt.Errorf("не удалось получить чат обсуждения: %w", err)
 		}
+		log.Printf("[DEBUG] Чат обсуждения ID=%d", discussionChat.ID)
 
-		discussion, err := module.Modf_getPostDiscussion(ctx, api, channel, posts[0].ID)
-		if err != nil {
-			return fmt.Errorf("не удалось получить обсуждение: %w", err)
-		}
-
-		if errJoin := module.Modf_JoinChannel(ctx, api, discussion.Chat); errJoin != nil {
-			log.Printf("[ERROR] Не удалось вступить в чат обсуждения: ID=%d Ошибка=%v", discussion.Chat.ID, errJoin)
+		if errJoin := module.Modf_JoinChannel(ctx, api, discussionChat); errJoin != nil {
+			log.Printf("[ERROR] Не удалось вступить в чат обсуждения: ID=%d Ошибка=%v", discussionChat.ID, errJoin)
 		}
 
 		// Получаем список разрешённых реакций
-		allowedReactions, err := module.GetAllowedReactions(ctx, api, discussion.Chat, reactionList)
+		allowedReactions, err := module.GetAllowedReactions(ctx, api, discussionChat, reactionList)
 		if err != nil {
 			return fmt.Errorf("не удалось получить доступные реакции: %w", err)
 		}
 		if len(allowedReactions) == 0 {
 			return fmt.Errorf("нет доступных реакций в чате")
 		}
+		log.Printf("[DEBUG] Доступные реакции: %v", allowedReactions)
 
-		// Запрашиваем последние сообщения из обсуждения поста
-		messages, err := module.GetDiscussionReplies(ctx, api, discussion.Chat, discussion.PostMessage.ID, msgCount)
+		// Запрашиваем последние сообщения из обсуждения
+		messages, err := module.GetChannelPosts(ctx, api, discussionChat, msgCount)
 		if err != nil {
 			return fmt.Errorf("не удалось получить сообщения обсуждения: %w", err)
 		}
+		log.Printf("[DEBUG] Получено %d сообщений", len(messages))
 
 		// Определяем сообщение, которому нужно поставить реакцию
 		targetMsg, err := selectTargetMessage(messages)
 		if err != nil {
 			return err
 		}
+		log.Printf("[DEBUG] Целевое сообщение ID=%d", targetMsg.ID)
 
 		// Ставим реакцию на найденное сообщение
 		reaction := getRandomReaction(allowedReactions)
+		log.Printf("[DEBUG] Отправляем реакцию %s", reaction)
 		_, err = api.MessagesSendReaction(ctx, &tg.MessagesSendReactionRequest{
-			Peer:        &tg.InputPeerChannel{ChannelID: discussion.Chat.ID, AccessHash: discussion.Chat.AccessHash},
+			Peer:        &tg.InputPeerChannel{ChannelID: discussionChat.ID, AccessHash: discussionChat.AccessHash},
 			MsgID:       targetMsg.ID,
 			Reaction:    []tg.ReactionClass{&tg.ReactionEmoji{Emoticon: reaction}},
 			AddToRecent: true,
