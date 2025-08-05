@@ -101,6 +101,7 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 			}
 
 			reaction := getRandomReaction(allowedReactions)
+      
 			_, err := api.MessagesSendReaction(ctx, &tg.MessagesSendReactionRequest{
 				Peer:        &tg.InputPeerChannel{ChannelID: discussion.Chat.ID, AccessHash: discussion.Chat.AccessHash},
 				MsgID:       msg.ID,
