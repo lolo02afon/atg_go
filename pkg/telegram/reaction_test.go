@@ -6,9 +6,9 @@ import (
 	"github.com/gotd/td/tg"
 )
 
-// TestSelectTargetMessage_LastMessage проверяет, что выбирается последнее сообщение.
-func TestSelectTargetMessage_LastMessage(t *testing.T) {
-	msgs := []*tg.Message{{ID: 1}, {ID: 2}, {ID: 3}}
+// TestSelectTargetMessage_NewestMessage проверяет, что выбирается самое новое сообщение.
+func TestSelectTargetMessage_NewestMessage(t *testing.T) {
+	msgs := []*tg.Message{{ID: 3}, {ID: 2}, {ID: 1}}
 	msg, err := selectTargetMessage(msgs)
 	if err != nil {
 		t.Fatalf("неожиданная ошибка: %v", err)
@@ -28,8 +28,8 @@ func TestSelectTargetMessage_Empty(t *testing.T) {
 // TestSelectTargetMessage_IgnoresReactions убеждается, что наличие реакций не влияет на выбор.
 func TestSelectTargetMessage_IgnoresReactions(t *testing.T) {
 	msgs := []*tg.Message{
-		{ID: 1},
 		{ID: 2, Reactions: tg.MessageReactions{Results: []tg.ReactionCount{{Reaction: &tg.ReactionEmoji{Emoticon: "❤️"}, Count: 1}}}},
+		{ID: 1},
 	}
 	msg, err := selectTargetMessage(msgs)
 	if err != nil {
