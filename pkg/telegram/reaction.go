@@ -95,6 +95,7 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 		}
 		reactedMsgID = targetMsg.ID
 		log.Printf("Реакция %s успешно отправлена", reaction)
+
 		return nil
 	})
 
