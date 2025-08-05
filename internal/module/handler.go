@@ -19,6 +19,7 @@ func NewHandler() *Handler { return &Handler{} }
 func (h *Handler) DispatcherActivity(c *gin.Context) {
 	var req struct {
 		TimeDelay       int                              `json:"time_delay" binding:"required"`
+
 		Repeat          int                              `json:"repeat" binding:"required"`
 		ActivityRequest []telegrammodule.ActivityRequest `json:"activity_request" binding:"required"`
 	}
@@ -29,6 +30,7 @@ func (h *Handler) DispatcherActivity(c *gin.Context) {
 	}
 
 	telegrammodule.ModF_DispatcherActivity(time.Duration(req.TimeDelay)*time.Second, req.Repeat, req.ActivityRequest)
+
 
 	c.JSON(http.StatusOK, gin.H{"status": "completed"})
 }
