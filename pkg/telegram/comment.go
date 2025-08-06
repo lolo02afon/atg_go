@@ -12,27 +12,26 @@ import (
 	"github.com/gotd/td/tg"
 )
 
-// SendComment - основная функция, которая:
-// 1. Подключается к Telegram
-// 2. Находит указанный канал
-// 3. Выбирает случайный пост
-// 4. Находит обсуждение этого поста
-// 5. Отправляет случайный эмодзи в обсуждение
-// Возвращает ID поста, к которому был отправлен комментарий. Если комментарий не отправлен, вернёт 0.
-// SendComment возвращает ID сообщения и ID чата обсуждения, в котором был оставлен комментарий.
+// SendComment подключается к Telegram, находит случайный пост в указанном канале
+// и отправляет случайный эмодзи в обсуждение этого поста.
+// Возвращает ID сообщения, к которому был оставлен комментарий (int),
+// ID чата обсуждения (int) и ошибку.
+// При неудаче оба идентификатора равны 0.
 func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount int, canSend func(channelID, messageID int) (bool, error), userIDs []int) (int, int, error) {
 	log.Printf("[START] Отправка эмодзи в канал %s от имени %s", channelURL, phone)
 
 	// Извлекаем username из URL канала (например, из "https://t.me/channel" извлекаем "channel")
 	username, err := module.Modf_ExtractUsername(channelURL)
 	if err != nil {
-		return 0, fmt.Errorf("не удалось извлечь имя пользователя: %w", err)
+		// Возвращаем нулевые значения для идентификаторов при ошибке
+		return 0, 0, fmt.Errorf("не удалось извлечь имя пользователя: %w", err)
 	}
 
 	// Создаем клиент Telegram с указанными параметрами
 	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone)
 	if err != nil {
-		return 0, err
+		// При ошибке инициализации также возвращаем нулевые идентификаторы
+		return 0, 0, err
 	}
 
 	// Создаем контекст с таймаутом 60 секунд
@@ -98,7 +97,8 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 			replyToMsgID := discussionData.PostMessage.ID
 
 			if canSend != nil {
-				allowed, err := canSend(discussionData.Chat.ID, replyToMsgID)
+				// Преобразуем идентификатор чата обсуждения из int64 в int для совместимости
+				allowed, err := canSend(int(discussionData.Chat.ID), replyToMsgID)
 				if err != nil {
 					return err
 				}
@@ -125,7 +125,8 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 				return err
 			}
 			msgID = replyToMsgID
-			chatID = discussionData.Chat.ID
+			// Сохраняем ID чата обсуждения, приводя его к типу int
+			chatID = int(discussionData.Chat.ID)
 			return nil
 		}
 
