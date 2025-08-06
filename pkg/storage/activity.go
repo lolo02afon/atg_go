@@ -2,6 +2,7 @@ package storage
 
 import (
 	"database/sql"
+	"strconv"
 	"time"
 )
 
@@ -13,9 +14,11 @@ const ActivityTypeComment = "comment"
 
 // SaveActivity сохраняет действие аккаунта в таблице activity вместе со временем.
 func (db *DB) SaveActivity(accountID, channelID, messageID int, activityType string) error {
+	chID := strconv.FormatInt(int64(channelID), 10) // сохраняем ID как строку
+	msgID := strconv.FormatInt(int64(messageID), 10)
 	_, err := db.Conn.Exec(
 		`INSERT INTO activity (id_account, id_channel, id_message, activity_type, date_time) VALUES ($1, $2, $3, $4, $5)`,
-		accountID, channelID, messageID, activityType, time.Now(),
+		accountID, chID, msgID, activityType, time.Now(),
 	)
 	return err
 }
@@ -36,9 +39,10 @@ func (db *DB) SaveComment(accountID, channelID, messageID int) error {
 // уже есть в таблице.
 func (db *DB) HasComment(accountID, messageID int) (bool, error) {
 	var exists bool
+	msgID := strconv.FormatInt(int64(messageID), 10) // сравниваем по строковому ID
 	err := db.Conn.QueryRow(
 		`SELECT EXISTS(SELECT 1 FROM activity WHERE id_account = $1 AND id_message = $2 AND activity_type = 'comment')`,
-		accountID, messageID,
+		accountID, msgID,
 	).Scan(&exists)
 	return exists, err
 }
@@ -47,9 +51,11 @@ func (db *DB) HasComment(accountID, messageID int) (bool, error) {
 // для заданного канала. Возвращает true при наличии записи с типом 'comment'.
 func (db *DB) HasCommentForPost(channelID, messageID int) (bool, error) {
 	var exists bool
+	chID := strconv.FormatInt(int64(channelID), 10)
+	msgID := strconv.FormatInt(int64(messageID), 10)
 	err := db.Conn.QueryRow(
 		`SELECT EXISTS(SELECT 1 FROM activity WHERE id_channel = $1 AND id_message = $2 AND activity_type = 'comment')`,
-		channelID, messageID,
+		chID, msgID,
 	).Scan(&exists)
 	return exists, err
 }
@@ -58,18 +64,23 @@ func (db *DB) HasCommentForPost(channelID, messageID int) (bool, error) {
 // поставил реакцию последним в рамках указанного канала.
 // Если реакций ещё не было, возвращает 0.
 func (db *DB) GetLastReactionMessageID(accountID, channelID int) (int, error) {
-	var messageID int
+	var messageIDStr string
+	chID := strconv.FormatInt(int64(channelID), 10)
 	err := db.Conn.QueryRow(
 		`SELECT id_message FROM activity
                  WHERE id_account = $1 AND id_channel = $2 AND activity_type = $3
                  ORDER BY date_time DESC LIMIT 1`,
-		accountID, channelID, ActivityTypeReaction,
-	).Scan(&messageID)
+		accountID, chID, ActivityTypeReaction,
+	).Scan(&messageIDStr)
 	if err == sql.ErrNoRows {
 		return 0, nil
 	}
 	if err != nil {
 		return 0, err
+	}
+	messageID, convErr := strconv.Atoi(messageIDStr)
+	if convErr != nil {
+		return 0, convErr
 	}
 	return messageID, nil
 }
