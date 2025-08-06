@@ -87,51 +87,61 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 		}
 		log.Printf("[DEBUG] Целевое сообщение ID=%d", targetMsg.ID)
 
-		// Ставим реакцию на найденное сообщение.
-		// Если выбранная реакция недопустима, пробуем остальные.
-		for len(allowedReactions) > 0 {
-			reaction := getRandomReaction(allowedReactions)
-			log.Printf("[DEBUG] Отправляем реакцию %s", reaction)
+		// Выбираем реакцию: случайную из нашего списка, но если она не разрешена,
+		// используем первую разрешённую админами обсуждения.
+		reaction := pickReaction(reactionList, allowedReactions)
+		log.Printf("[DEBUG] Отправляем реакцию %s", reaction)
+
+		send := func(r string) error {
 			_, err = api.MessagesSendReaction(ctx, &tg.MessagesSendReactionRequest{
 				Peer:        &tg.InputPeerChannel{ChannelID: discussionChat.ID, AccessHash: discussionChat.AccessHash},
 				MsgID:       targetMsg.ID,
-				Reaction:    []tg.ReactionClass{&tg.ReactionEmoji{Emoticon: reaction}},
+				Reaction:    []tg.ReactionClass{&tg.ReactionEmoji{Emoticon: r}},
 				AddToRecent: true,
 			})
-			if err == nil {
-				reactedMsgID = targetMsg.ID
-				log.Printf("Реакция %s успешно отправлена", reaction)
-				return nil
-			}
-			if tg.IsReactionInvalid(err) {
-				log.Printf("[WARN] Реакция %s недопустима: %v", reaction, err)
-				allowedReactions = removeReaction(allowedReactions, reaction)
-				continue
-			}
-			return fmt.Errorf("не удалось отправить реакцию: %w", err)
+			return err
 		}
-		return fmt.Errorf("не удалось отправить ни одну допустимую реакцию")
+
+		if errSend := send(reaction); errSend != nil {
+			if tg.IsReactionInvalid(errSend) && reaction != allowedReactions[0] {
+				log.Printf("[WARN] Реакция %s недопустима: %v", reaction, errSend)
+				reaction = allowedReactions[0]
+				log.Printf("[DEBUG] Отправляем реакцию %s", reaction)
+				if errSend = send(reaction); errSend != nil {
+					return fmt.Errorf("не удалось отправить реакцию: %w", errSend)
+				}
+			} else {
+				return fmt.Errorf("не удалось отправить реакцию: %w", errSend)
+			}
+		}
+
+		reactedMsgID = targetMsg.ID
+		log.Printf("Реакция %s успешно отправлена", reaction)
+		return nil
 	})
 
 	return reactedMsgID, err
 }
 
-var reactionList = []string{"❤️", "😂"}
+var reactionList = []string{"❤️", "👍"}
+
+var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 // getRandomReaction возвращает случайную реакцию из переданного списка.
 func getRandomReaction(reactions []string) string {
-	rand.Seed(time.Now().UnixNano())
-	return reactions[rand.Intn(len(reactions))]
+	return reactions[rnd.Intn(len(reactions))]
 }
 
-// removeReaction удаляет указанную реакцию из слайса.
-func removeReaction(list []string, r string) []string {
-	for i, v := range list {
-		if v == r {
-			return append(list[:i], list[i+1:]...)
+// pickReaction выбирает случайную реакцию из base, если она разрешена.
+// Если случайно выбранная реакция запрещена, возвращает первую из allowed.
+func pickReaction(base, allowed []string) string {
+	r := getRandomReaction(base)
+	for _, a := range allowed {
+		if r == a {
+			return r
 		}
 	}
-	return list
+	return allowed[0]
 }
 
 // selectTargetMessage выбирает самое новое сообщение без реакций.
