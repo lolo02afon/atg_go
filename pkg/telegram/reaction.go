@@ -98,7 +98,8 @@ func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID
 		log.Printf("[DEBUG] Целевое сообщение ID=%d", targetMsg.ID)
 
 		// Проверяем, не слишком ли близко текущее сообщение к предыдущему
-		canReact, err := db.CanReactOnMessage(accountID, targetMsg.ID)
+		// Передаём ID аккаунта, канала и сообщения
+		canReact, err := db.CanReactOnMessage(accountID, channelID, targetMsg.ID)
 		if err != nil {
 			return fmt.Errorf("не удалось проверить возможность реакции: %w", err)
 		}
