@@ -11,3 +11,8 @@ func SaveActivity(db *storage.DB, accountID, channelID, messageID int, activityT
 func SaveReactionActivity(db *storage.DB, accountID, channelID, messageID int) error {
 	return db.SaveReaction(accountID, channelID, messageID)
 }
+
+// SaveCommentActivity сохраняет комментарий с типом activity_type "comment".
+func SaveCommentActivity(db *storage.DB, accountID, channelID, messageID int) error {
+	return db.SaveComment(accountID, channelID, messageID)
+}
