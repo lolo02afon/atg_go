@@ -1,6 +1,9 @@
 package storage
 
-import "time"
+import (
+	"database/sql"
+	"time"
+)
 
 // ActivityTypeReaction — значение поля activity_type для реакций.
 const ActivityTypeReaction = "reaction"
@@ -49,4 +52,42 @@ func (db *DB) HasCommentForPost(channelID, messageID int) (bool, error) {
 		channelID, messageID,
 	).Scan(&exists)
 	return exists, err
+}
+
+// GetLastReactionMessageID возвращает ID сообщения, на которое аккаунт
+// поставил реакцию последним в рамках указанного канала.
+// Если реакций ещё не было, возвращает 0.
+func (db *DB) GetLastReactionMessageID(accountID, channelID int) (int, error) {
+	var messageID int
+	err := db.Conn.QueryRow(
+		`SELECT id_message FROM activity
+                 WHERE id_account = $1 AND id_channel = $2 AND activity_type = $3
+                 ORDER BY date_time DESC LIMIT 1`,
+		accountID, channelID, ActivityTypeReaction,
+	).Scan(&messageID)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return messageID, nil
+}
+
+// CanReactOnMessage проверяет, можно ли аккаунту поставить реакцию на
+// сообщение с указанным ID в заданном канале. Разница между ID должна быть
+// не менее 10. Если аккаунт ещё не ставил реакций в канале, возвращает true.
+func (db *DB) CanReactOnMessage(accountID, channelID, messageID int) (bool, error) {
+	lastID, err := db.GetLastReactionMessageID(accountID, channelID)
+	if err != nil {
+		return false, err
+	}
+	if lastID == 0 {
+		return true, nil
+	}
+	diff := messageID - lastID
+	if diff < 0 {
+		diff = -diff
+	}
+	return diff >= 10, nil
 }
