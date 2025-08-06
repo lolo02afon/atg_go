@@ -96,6 +96,15 @@ func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID
 		}
 		log.Printf("[DEBUG] Целевое сообщение ID=%d", targetMsg.ID)
 
+		// Проверяем, не слишком ли близко текущее сообщение к предыдущему
+		canReact, err := db.CanReactOnMessage(accountID, targetMsg.ID)
+		if err != nil {
+			return fmt.Errorf("не удалось проверить возможность реакции: %w", err)
+		}
+		if !canReact {
+			return fmt.Errorf("реакция на сообщение ID=%d запрещена: разница в ID должна быть не менее 10", targetMsg.ID)
+		}
+
 		// Выбираем реакцию: случайную из нашего списка, но если она не разрешена,
 		// используем первую разрешённую админами обсуждения.
 		reaction := pickReaction(reactionList, allowedReactions)
