@@ -23,13 +23,14 @@ func (db *DB) SaveReaction(accountID, channelID, messageID int) error {
 }
 
 // SaveComment сохраняет информацию о комментарии в таблице activity.
-// messageID — идентификатор поста, к которому оставлен комментарий.
+// messageID — идентификатор созданного комментария.
 func (db *DB) SaveComment(accountID, channelID, messageID int) error {
 	return db.SaveActivity(accountID, channelID, messageID, ActivityTypeComment)
 }
 
-// HasComment проверяет, оставляла ли учетная запись комментарий к указанному посту.
-// Возвращает true, если запись с activity_type = 'comment' уже существует.
+// HasComment проверяет, существует ли комментарий с указанным идентификатором
+// для заданной учетной записи. Возвращает true, если запись с activity_type = 'comment'
+// уже есть в таблице.
 func (db *DB) HasComment(accountID, messageID int) (bool, error) {
 	var exists bool
 	err := db.Conn.QueryRow(
@@ -39,9 +40,8 @@ func (db *DB) HasComment(accountID, messageID int) (bool, error) {
 	return exists, err
 }
 
-// HasCommentForPost проверяет, оставлялся ли комментарий к посту любым из наших аккаунтов.
-// Возвращает true, если в таблице activity есть запись с заданными каналом и постом
-// и типом activity_type = 'comment'.
+// HasCommentForPost проверяет, существует ли комментарий с указанным идентификатором
+// для заданного канала. Возвращает true при наличии записи с типом 'comment'.
 func (db *DB) HasCommentForPost(channelID, messageID int) (bool, error) {
 	var exists bool
 	err := db.Conn.QueryRow(

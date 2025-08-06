@@ -13,7 +13,7 @@ func SaveReactionActivity(db *storage.DB, accountID, channelID, messageID int) e
 }
 
 // SaveCommentActivity сохраняет комментарий с типом activity_type "comment".
-// messageID — ID поста, который был прокомментирован.
+// messageID — ID созданного комментария в обсуждении.
 func SaveCommentActivity(db *storage.DB, accountID, channelID, messageID int) error {
 	return db.SaveComment(accountID, channelID, messageID)
 }

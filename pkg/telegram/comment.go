@@ -132,8 +132,8 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 			msgID = sentMsgID
 			// Сохраняем ID канала, приводя его к типу int
 			channelID = int(channel.ID)
-			// Записываем активность в таблицу activity по ID исходного поста
-			if err := module.SaveCommentActivity(db, accountID, channelID, replyToMsgID); err != nil {
+			// Записываем активность в таблицу activity по ID созданного комментария
+			if err := module.SaveCommentActivity(db, accountID, channelID, msgID); err != nil {
 				return fmt.Errorf("не удалось сохранить активность: %w", err)
 			}
 
