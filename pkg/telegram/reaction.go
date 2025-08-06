@@ -185,11 +185,7 @@ func selectTargetMessage(messages []*tg.Message, db *storage.DB, accountID, chan
 		}
 		// Проверяем возможность реакции с учётом последнего ID аккаунта
 		// Передаём ID аккаунта, канала и сообщения
-		canReact, err := db.CanReactOnMessage(
-			accountID,
-			channelID,
-			m.ID,
-		)
+		canReact, err := db.CanReactOnMessage(accountID, channelID, m.ID)
 		if err != nil {
 			return nil, err
 		}
