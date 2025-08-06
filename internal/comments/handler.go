@@ -93,7 +93,7 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		}
 
 		// --- НОВАЯ ЛОГИКА: выбор канала для каждого аккаунта ---
-		channelID, channelURL, err := h.CommentDB.GetRandomChannelWithID()
+		channelURL, err := h.CommentDB.GetRandomChannel()
 		if errors.Is(err, sql.ErrNoRows) {
 			log.Printf("[HANDLER ERROR] No channels available: %v", err)
 			c.JSON(http.StatusNotFound, gin.H{"error": "No channels available"})
@@ -107,13 +107,13 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		log.Printf("[HANDLER INFO] Selected channel for %s: %s", account.Phone, channelURL)
 
 		// Отправка комментария в выбранный канал
-		msgID, err := telegram.SendComment(
+		msgID, channelID, err := telegram.SendComment(
 			account.Phone,
 			channelURL,
 			account.ApiID,
 			account.ApiHash,
 			request.PostsCount,
-			func(messageID int) (bool, error) {
+			func(channelID, messageID int) (bool, error) {
 				exists, err := h.DB.HasCommentForPost(channelID, messageID)
 				if err != nil {
 					return false, err

@@ -82,7 +82,7 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 		}
 
 		// Выбор случайного канала
-		channelID, channelURL, err := h.CommentDB.GetRandomChannelWithID()
+		channelURL, err := h.CommentDB.GetRandomChannel()
 		if errors.Is(err, sql.ErrNoRows) {
 			log.Printf("[HANDLER ERROR] Нет доступных каналов: %v", err)
 			c.JSON(http.StatusNotFound, gin.H{"error": "No channels available"})
@@ -95,7 +95,7 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 		}
 		log.Printf("[HANDLER INFO] Выбран канал для %s: %s", account.Phone, channelURL)
 
-		msgID, err := telegram.SendReaction(
+		msgID, channelID, err := telegram.SendReaction(
 			account.Phone,
 			channelURL,
 			account.ApiID,
@@ -128,9 +128,9 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
-// recordReaction сохраняет информацию об активности в базе.
+// recordReaction сохраняет информацию о поставленной реакции в таблице activity.
 func (h *ReactionHandler) recordReaction(accountID, channelID, messageID int) {
-	if err := h.DB.SaveActivity(accountID, channelID, messageID, "reaction"); err != nil {
+	if err := h.DB.SaveReaction(accountID, channelID, messageID); err != nil {
 		log.Printf("Не удалось сохранить активность для аккаунта %d: %v", accountID, err)
 	}
 }

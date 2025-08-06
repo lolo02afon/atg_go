@@ -13,8 +13,8 @@ import (
 )
 
 // SendReaction выполняет добавление реакции к последнему сообщению обсуждения
-// канала. Возвращает ID сообщения, к которому была добавлена реакция.
-func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount int) (int, error) {
+// канала. Возвращает ID сообщения и ID чата, в котором была поставлена реакция.
+func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount int) (int, int, error) {
 	log.Printf("[START] Отправка реакции в канал %s от имени %s", channelURL, phone)
 
 	username, err := module.Modf_ExtractUsername(channelURL)
@@ -30,7 +30,10 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	var reactedMsgID int
+	var (
+		reactedMsgID int
+		chatID       int
+	)
 
 	err = client.Run(ctx, func(ctx context.Context) error {
 		api := tg.NewClient(client)
@@ -87,40 +90,78 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 		}
 		log.Printf("[DEBUG] Целевое сообщение ID=%d", targetMsg.ID)
 
-		// Ставим реакцию на найденное сообщение
-		reaction := getRandomReaction(allowedReactions)
+		// Выбираем реакцию: случайную из нашего списка, но если она не разрешена,
+		// используем первую разрешённую админами обсуждения.
+		reaction := pickReaction(reactionList, allowedReactions)
 		log.Printf("[DEBUG] Отправляем реакцию %s", reaction)
-		_, err = api.MessagesSendReaction(ctx, &tg.MessagesSendReactionRequest{
-			Peer:        &tg.InputPeerChannel{ChannelID: discussionChat.ID, AccessHash: discussionChat.AccessHash},
-			MsgID:       targetMsg.ID,
-			Reaction:    []tg.ReactionClass{&tg.ReactionEmoji{Emoticon: reaction}},
-			AddToRecent: true,
-		})
-		if err != nil {
-			return fmt.Errorf("не удалось отправить реакцию: %w", err)
+
+		send := func(r string) error {
+			_, err = api.MessagesSendReaction(ctx, &tg.MessagesSendReactionRequest{
+				Peer:        &tg.InputPeerChannel{ChannelID: discussionChat.ID, AccessHash: discussionChat.AccessHash},
+				MsgID:       targetMsg.ID,
+				Reaction:    []tg.ReactionClass{&tg.ReactionEmoji{Emoticon: r}},
+				AddToRecent: true,
+			})
+			return err
 		}
-		reactedMsgID = targetMsg.ID
+
+		if errSend := send(reaction); errSend != nil {
+			if tg.IsReactionInvalid(errSend) && reaction != allowedReactions[0] {
+				log.Printf("[WARN] Реакция %s недопустима: %v", reaction, errSend)
+				reaction = allowedReactions[0]
+				log.Printf("[DEBUG] Отправляем реакцию %s", reaction)
+				if errSend = send(reaction); errSend != nil {
+					return fmt.Errorf("не удалось отправить реакцию: %w", errSend)
+				}
+			} else {
+				return fmt.Errorf("не удалось отправить реакцию: %w", errSend)
+			}
+		}
+
 		log.Printf("Реакция %s успешно отправлена", reaction)
+		// Сохраняем ID сообщения и ID чата обсуждения
+		reactedMsgID = targetMsg.ID
+		chatID = discussionChat.ID
 		return nil
 	})
 
-	return reactedMsgID, err
+	return reactedMsgID, chatID, err
 }
 
-var reactionList = []string{"❤️", "😂"}
+var reactionList = []string{"❤️", "👍"}
+
+var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 // getRandomReaction возвращает случайную реакцию из переданного списка.
 func getRandomReaction(reactions []string) string {
-	rand.Seed(time.Now().UnixNano())
-	return reactions[rand.Intn(len(reactions))]
+	return reactions[rnd.Intn(len(reactions))]
 }
 
-// selectTargetMessage выбирает сообщение для отправки реакции.
-// Всегда возвращает последнее сообщение из списка, если он не пуст.
-// В противном случае возвращает ошибку.
+// pickReaction выбирает случайную реакцию из base, если она разрешена.
+// Если случайно выбранная реакция запрещена, возвращает первую из allowed.
+func pickReaction(base, allowed []string) string {
+	r := getRandomReaction(base)
+	for _, a := range allowed {
+		if r == a {
+			return r
+		}
+	}
+	return allowed[0]
+}
+
+// selectTargetMessage выбирает самое новое сообщение без реакций.
+// MessagesGetHistory возвращает сообщения от новых к старым,
+// поэтому проходим по списку и ищем первое сообщение,
+// у которого отсутствуют реакции. Если все сообщения уже
+// содержат реакции, возвращаем ошибку.
 func selectTargetMessage(messages []*tg.Message) (*tg.Message, error) {
 	if len(messages) == 0 {
 		return nil, fmt.Errorf("нет сообщений для реакции")
 	}
-	return messages[len(messages)-1], nil
+	for _, m := range messages {
+		if len(m.Reactions.Results) == 0 {
+			return m, nil
+		}
+	}
+	return nil, fmt.Errorf("подходящее сообщение без реакций не найдено")
 }

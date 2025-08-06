@@ -1,5 +1,8 @@
 package storage
 
+// ActivityTypeReaction — значение поля activity_type для реакций.
+const ActivityTypeReaction = "reaction"
+
 // SaveActivity persists an account action in the activity table.
 func (db *DB) SaveActivity(accountID, channelID, messageID int, activityType string) error {
 	_, err := db.Conn.Exec(
@@ -7,6 +10,11 @@ func (db *DB) SaveActivity(accountID, channelID, messageID int, activityType str
 		accountID, channelID, messageID, activityType,
 	)
 	return err
+}
+
+// SaveReaction сохраняет информацию о реакции в таблице activity.
+func (db *DB) SaveReaction(accountID, channelID, messageID int) error {
+	return db.SaveActivity(accountID, channelID, messageID, ActivityTypeReaction)
 }
 
 // HasComment проверяет, оставляла ли учетная запись комментарий к указанному посту.
