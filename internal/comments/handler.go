@@ -108,6 +108,8 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 
 		// Отправка комментария в выбранный канал
 		msgID, channelID, err := telegram.SendComment(
+			h.DB,
+			account.ID,
 			account.Phone,
 			channelURL,
 			account.ApiID,
@@ -132,8 +134,6 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 			continue
 		}
 
-		h.recordComment(account.ID, channelID, msgID)
-
 		successCount++
 		log.Printf("[HANDLER DEBUG] Success for account: %s", account.Phone)
 	}
@@ -147,10 +147,4 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 	}
 	log.Printf("[HANDLER INFO] Final result: %+v", result)
 	c.JSON(http.StatusOK, result)
-}
-
-func (h *CommentHandler) recordComment(accountID, channelID, messageID int) {
-	if err := h.DB.SaveActivity(accountID, channelID, messageID, "comment"); err != nil {
-		log.Printf("Failed to save activity for account %d: %v", accountID, err)
-	}
 }

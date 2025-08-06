@@ -7,16 +7,19 @@ import (
 	"math/rand"
 	"time"
 
+	"atg_go/pkg/storage"
 	module "atg_go/pkg/telegram/module"
 
 	"github.com/gotd/td/tg"
 )
 
 // SendReaction добавляет реакцию к последнему сообщению обсуждения канала.
+// После успешной отправки сохраняет запись об активности в таблице activity.
 // Возвращает ID сообщения, к которому была поставлена реакция (int),
 // ID исходного канала (int) и ошибку.
 // При неудаче оба идентификатора равны 0.
-func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount int) (int, int, error) {
+func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID int, apiHash string, msgCount int) (int, int, error) {
+
 	log.Printf("[START] Отправка реакции в канал %s от имени %s", channelURL, phone)
 
 	username, err := module.Modf_ExtractUsername(channelURL)
@@ -127,6 +130,11 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 		reactedMsgID = targetMsg.ID
 		// Преобразуем идентификатор канала из int64 в int для дальнейшего использования
 		channelID = int(channel.ID)
+		// Записываем активность в таблицу activity
+		if err := module.SaveReactionActivity(db, accountID, channelID, reactedMsgID); err != nil {
+			return fmt.Errorf("не удалось сохранить активность: %w", err)
+		}
+
 		return nil
 	})
 
