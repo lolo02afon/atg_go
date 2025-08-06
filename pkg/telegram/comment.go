@@ -7,32 +7,33 @@ import (
 	"math/rand"
 	"time"
 
+	"atg_go/pkg/storage"
 	module "atg_go/pkg/telegram/module"
 
 	"github.com/gotd/td/tg"
 )
 
-// SendComment - основная функция, которая:
-// 1. Подключается к Telegram
-// 2. Находит указанный канал
-// 3. Выбирает случайный пост
-// 4. Находит обсуждение этого поста
-// 5. Отправляет случайный эмодзи в обсуждение
-// Возвращает ID поста, к которому был отправлен комментарий. Если комментарий не отправлен, вернёт 0.
-// SendComment возвращает ID сообщения и ID чата обсуждения, в котором был оставлен комментарий.
-func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount int, canSend func(channelID, messageID int) (bool, error), userIDs []int) (int, int, error) {
+// SendComment подключается к Telegram, находит случайный пост в указанном канале
+// и отправляет случайный эмодзи в обсуждение этого поста.
+// После отправки сохраняет запись об активности в таблице activity.
+// Возвращает ID созданного комментария (int),
+// ID исходного канала (int) и ошибку.
+// При неудаче оба идентификатора равны 0.
+func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID int, apiHash string, postsCount int, canSend func(channelID, messageID int) (bool, error), userIDs []int) (int, int, error) {
 	log.Printf("[START] Отправка эмодзи в канал %s от имени %s", channelURL, phone)
 
 	// Извлекаем username из URL канала (например, из "https://t.me/channel" извлекаем "channel")
 	username, err := module.Modf_ExtractUsername(channelURL)
 	if err != nil {
-		return 0, fmt.Errorf("не удалось извлечь имя пользователя: %w", err)
+		// Возвращаем нулевые значения для идентификаторов при ошибке
+		return 0, 0, fmt.Errorf("не удалось извлечь имя пользователя: %w", err)
 	}
 
 	// Создаем клиент Telegram с указанными параметрами
 	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone)
 	if err != nil {
-		return 0, err
+		// При ошибке инициализации также возвращаем нулевые идентификаторы
+		return 0, 0, err
 	}
 
 	// Создаем контекст с таймаутом 60 секунд
@@ -40,8 +41,8 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 	defer cancel() // Гарантируем отмену контекста при выходе из функции
 
 	var (
-		msgID  int
-		chatID int
+		msgID     int
+		channelID int
 	)
 
 	// Запускаем клиент и выполняем операции
@@ -98,7 +99,8 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 			replyToMsgID := discussionData.PostMessage.ID
 
 			if canSend != nil {
-				allowed, err := canSend(discussionData.Chat.ID, replyToMsgID)
+				// Используем ID исходного канала при проверке возможности отправки
+				allowed, err := canSend(int(channel.ID), replyToMsgID)
 				if err != nil {
 					return err
 				}
@@ -118,14 +120,22 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 				continue
 			}
 
-			if err := sendEmojiReply(ctx, api, &tg.InputPeerChannel{
+			// Отправляем эмодзи и получаем ID созданного сообщения в обсуждении
+			sentMsgID, err := sendEmojiReply(ctx, api, &tg.InputPeerChannel{
 				ChannelID:  discussionData.Chat.ID,
 				AccessHash: discussionData.Chat.AccessHash,
-			}, replyToMsgID); err != nil {
+			}, replyToMsgID)
+			if err != nil {
 				return err
 			}
-			msgID = replyToMsgID
-			chatID = discussionData.Chat.ID
+			// Сохраняем ID созданного комментария
+			msgID = sentMsgID
+			// Сохраняем ID канала, приводя его к типу int
+			channelID = int(channel.ID)
+			// Записываем активность в таблицу activity
+			if err := module.SaveActivity(db, accountID, channelID, msgID, "comment"); err != nil {
+				return fmt.Errorf("не удалось сохранить активность: %w", err)
+			}
 			return nil
 		}
 
@@ -133,7 +143,7 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 
 	})
 
-	return msgID, chatID, err
+	return msgID, channelID, err
 }
 
 var emojiList = []string{
@@ -154,12 +164,13 @@ func getRandomEmoji() string {
 }
 
 // отправляет выбранный эмодзи как ответ на указанное сообщение
-func sendEmojiReply(ctx context.Context, api *tg.Client, peer *tg.InputPeerChannel, replyToMsgID int) error {
+// и возвращает ID созданного сообщения в обсуждении
+func sendEmojiReply(ctx context.Context, api *tg.Client, peer *tg.InputPeerChannel, replyToMsgID int) (int, error) {
 	// Получаем случайный эмодзи
 	emoji := getRandomEmoji()
 
 	// Отправляем эмодзи как ответ (peer и replyToMsgID уже заданы вызывающим)
-	_, err := api.MessagesSendMessage(ctx, &tg.MessagesSendMessageRequest{
+	upd, err := api.MessagesSendMessage(ctx, &tg.MessagesSendMessageRequest{
 		Peer:     peer,
 		Message:  emoji,
 		ReplyTo:  &tg.InputReplyToMessage{ReplyToMsgID: replyToMsgID},
@@ -167,11 +178,26 @@ func sendEmojiReply(ctx context.Context, api *tg.Client, peer *tg.InputPeerChann
 	})
 
 	if err != nil {
-		return fmt.Errorf("не удалось отправить эмодзи: %w", err)
+		return 0, fmt.Errorf("не удалось отправить эмодзи: %w", err)
 	}
 
-	log.Printf("Эмодзи %s успешно отправлен", emoji)
-	return nil
+	// Пытаемся извлечь ID созданного сообщения
+	switch u := upd.(type) {
+	case *tg.Updates:
+		for _, update := range u.Updates {
+			if msgUpd, ok := update.(*tg.UpdateNewMessage); ok {
+				if m, ok := msgUpd.Message.(*tg.Message); ok {
+					log.Printf("Эмодзи %s успешно отправлен", emoji)
+					return m.ID, nil
+				}
+			}
+		}
+	case *tg.UpdateShortSentMessage:
+		log.Printf("Эмодзи %s успешно отправлен", emoji)
+		return u.ID, nil
+	}
+
+	return 0, fmt.Errorf("не удалось получить ID отправленного сообщения")
 }
 
 // проверяет, есть ли среди последних комментариев к посту сообщения от наших аккаунтов

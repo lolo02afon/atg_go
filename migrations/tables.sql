@@ -22,5 +22,6 @@ CREATE TABLE IF NOT EXISTS activity (
     id_account INTEGER NOT NULL,
     id_channel INTEGER NOT NULL,
     id_message INTEGER NOT NULL,
-    activity_type TEXT NOT NULL
+    activity_type TEXT NOT NULL,
+    date_time TIMESTAMP NOT NULL DEFAULT NOW()
 );

@@ -7,24 +7,30 @@ import (
 	"math/rand"
 	"time"
 
+	"atg_go/pkg/storage"
 	module "atg_go/pkg/telegram/module"
 
 	"github.com/gotd/td/tg"
 )
 
-// SendReaction выполняет добавление реакции к последнему сообщению обсуждения
-// канала. Возвращает ID сообщения и ID чата, в котором была поставлена реакция.
-func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount int) (int, int, error) {
+// SendReaction добавляет реакцию к последнему сообщению обсуждения канала.
+// После успешной отправки сохраняет запись об активности в таблице activity.
+// Возвращает ID сообщения, к которому была поставлена реакция (int),
+// ID исходного канала (int) и ошибку.
+// При неудаче оба идентификатора равны 0.
+func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID int, apiHash string, msgCount int) (int, int, error) {
 	log.Printf("[START] Отправка реакции в канал %s от имени %s", channelURL, phone)
 
 	username, err := module.Modf_ExtractUsername(channelURL)
 	if err != nil {
-		return 0, fmt.Errorf("не удалось извлечь имя пользователя: %w", err)
+		// Возвращаем нулевые идентификаторы при ошибке извлечения username
+		return 0, 0, fmt.Errorf("не удалось извлечь имя пользователя: %w", err)
 	}
 
 	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone)
 	if err != nil {
-		return 0, err
+		// При ошибке инициализации возвращаем нулевые идентификаторы
+		return 0, 0, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -32,7 +38,7 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 
 	var (
 		reactedMsgID int
-		chatID       int
+		channelID    int
 	)
 
 	err = client.Run(ctx, func(ctx context.Context) error {
@@ -119,13 +125,18 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 		}
 
 		log.Printf("Реакция %s успешно отправлена", reaction)
-		// Сохраняем ID сообщения и ID чата обсуждения
+		// Сохраняем ID сообщения и ID канала
 		reactedMsgID = targetMsg.ID
-		chatID = discussionChat.ID
+		// Преобразуем идентификатор канала из int64 в int для дальнейшего использования
+		channelID = int(channel.ID)
+		// Записываем активность в таблицу activity
+		if err := module.SaveReactionActivity(db, accountID, channelID, reactedMsgID); err != nil {
+			return fmt.Errorf("не удалось сохранить активность: %w", err)
+		}
 		return nil
 	})
 
-	return reactedMsgID, chatID, err
+	return reactedMsgID, channelID, err
 }
 
 var reactionList = []string{"❤️", "👍"}
