@@ -23,6 +23,7 @@ func (db *DB) SaveReaction(accountID, channelID, messageID int) error {
 }
 
 // SaveComment сохраняет информацию о комментарии в таблице activity.
+// messageID — идентификатор поста, к которому оставлен комментарий.
 func (db *DB) SaveComment(accountID, channelID, messageID int) error {
 	return db.SaveActivity(accountID, channelID, messageID, ActivityTypeComment)
 }
