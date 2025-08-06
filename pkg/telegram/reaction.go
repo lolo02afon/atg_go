@@ -19,7 +19,6 @@ import (
 // ID исходного канала (int) и ошибку.
 // При неудаче оба идентификатора равны 0.
 func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID int, apiHash string, msgCount int) (int, int, error) {
-
 	log.Printf("[START] Отправка реакции в канал %s от имени %s", channelURL, phone)
 
 	username, err := module.Modf_ExtractUsername(channelURL)
