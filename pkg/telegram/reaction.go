@@ -55,6 +55,7 @@ func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID
 			return err
 		}
 		log.Printf("[DEBUG] Найден канал ID=%d", channel.ID)
+		channelID = int(channel.ID)
 
 		// Пытаемся вступить в канал, чтобы иметь доступ к обсуждению
 		if errJoin := module.Modf_JoinChannel(ctx, api, channel); errJoin != nil {
@@ -90,7 +91,7 @@ func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID
 		log.Printf("[DEBUG] Получено %d сообщений", len(messages))
 
 		// Определяем сообщение, которому нужно поставить реакцию
-		targetMsg, err := selectTargetMessage(messages)
+		targetMsg, err := selectTargetMessage(messages, db, accountID, channelID)
 		if err != nil {
 			return err
 		}
@@ -125,10 +126,8 @@ func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID
 		}
 
 		log.Printf("Реакция %s успешно отправлена", reaction)
-		// Сохраняем ID сообщения и ID канала
+		// Сохраняем ID сообщения
 		reactedMsgID = targetMsg.ID
-		// Преобразуем идентификатор канала из int64 в int для дальнейшего использования
-		channelID = int(channel.ID)
 		// Записываем активность в таблицу activity
 		if err := module.SaveReactionActivity(db, accountID, channelID, reactedMsgID); err != nil {
 			return fmt.Errorf("не удалось сохранить активность: %w", err)
@@ -161,17 +160,25 @@ func pickReaction(base, allowed []string) string {
 	return allowed[0]
 }
 
-// selectTargetMessage выбирает самое новое сообщение без реакций.
-// MessagesGetHistory возвращает сообщения от новых к старым,
-// поэтому проходим по списку и ищем первое сообщение,
-// у которого отсутствуют реакции. Если все сообщения уже
-// содержат реакции, возвращаем ошибку.
-func selectTargetMessage(messages []*tg.Message) (*tg.Message, error) {
+// selectTargetMessage выбирает самое новое сообщение без реакций,
+// удовлетворяющее ограничению по минимальной разнице ID с последней
+// реакцией аккаунта в данном канале.
+// MessagesGetHistory возвращает сообщения от новых к старым, поэтому
+// последовательно проверяем каждое сообщение. Если подходящее не найдено,
+// возвращаем ошибку.
+func selectTargetMessage(messages []*tg.Message, db *storage.DB, accountID, channelID int) (*tg.Message, error) {
 	if len(messages) == 0 {
 		return nil, fmt.Errorf("нет сообщений для реакции")
 	}
 	for _, m := range messages {
-		if len(m.Reactions.Results) == 0 {
+		if len(m.Reactions.Results) != 0 {
+			continue
+		}
+		canReact, err := db.CanReactOnMessage(accountID, channelID, m.ID)
+		if err != nil {
+			return nil, err
+		}
+		if canReact {
 			return m, nil
 		}
 	}
