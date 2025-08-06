@@ -82,7 +82,7 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 		}
 
 		// Выбор случайного канала
-		channelID, channelURL, err := h.CommentDB.GetRandomChannelWithID()
+		channelURL, err := h.CommentDB.GetRandomChannel()
 		if errors.Is(err, sql.ErrNoRows) {
 			log.Printf("[HANDLER ERROR] Нет доступных каналов: %v", err)
 			c.JSON(http.StatusNotFound, gin.H{"error": "No channels available"})
@@ -95,7 +95,7 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 		}
 		log.Printf("[HANDLER INFO] Выбран канал для %s: %s", account.Phone, channelURL)
 
-		msgID, err := telegram.SendReaction(
+		msgID, channelID, err := telegram.SendReaction(
 			account.Phone,
 			channelURL,
 			account.ApiID,

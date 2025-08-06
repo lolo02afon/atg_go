@@ -19,7 +19,8 @@ import (
 // 4. Находит обсуждение этого поста
 // 5. Отправляет случайный эмодзи в обсуждение
 // Возвращает ID поста, к которому был отправлен комментарий. Если комментарий не отправлен, вернёт 0.
-func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount int, canSend func(messageID int) (bool, error), userIDs []int) (int, error) {
+// SendComment возвращает ID сообщения и ID чата обсуждения, в котором был оставлен комментарий.
+func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount int, canSend func(channelID, messageID int) (bool, error), userIDs []int) (int, int, error) {
 	log.Printf("[START] Отправка эмодзи в канал %s от имени %s", channelURL, phone)
 
 	// Извлекаем username из URL канала (например, из "https://t.me/channel" извлекаем "channel")
@@ -38,7 +39,10 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel() // Гарантируем отмену контекста при выходе из функции
 
-	var msgID int
+	var (
+		msgID  int
+		chatID int
+	)
 
 	// Запускаем клиент и выполняем операции
 	err = client.Run(ctx, func(ctx context.Context) error {
@@ -94,7 +98,7 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 			replyToMsgID := discussionData.PostMessage.ID
 
 			if canSend != nil {
-				allowed, err := canSend(replyToMsgID)
+				allowed, err := canSend(discussionData.Chat.ID, replyToMsgID)
 				if err != nil {
 					return err
 				}
@@ -121,6 +125,7 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 				return err
 			}
 			msgID = replyToMsgID
+			chatID = discussionData.Chat.ID
 			return nil
 		}
 
@@ -128,7 +133,7 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 
 	})
 
-	return msgID, err
+	return msgID, chatID, err
 }
 
 var emojiList = []string{

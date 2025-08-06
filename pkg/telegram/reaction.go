@@ -13,8 +13,8 @@ import (
 )
 
 // SendReaction выполняет добавление реакции к последнему сообщению обсуждения
-// канала. Возвращает ID сообщения, к которому была добавлена реакция.
-func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount int) (int, error) {
+// канала. Возвращает ID сообщения и ID чата, в котором была поставлена реакция.
+func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount int) (int, int, error) {
 	log.Printf("[START] Отправка реакции в канал %s от имени %s", channelURL, phone)
 
 	username, err := module.Modf_ExtractUsername(channelURL)
@@ -30,7 +30,10 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	var reactedMsgID int
+	var (
+		reactedMsgID int
+		chatID       int
+	)
 
 	err = client.Run(ctx, func(ctx context.Context) error {
 		api := tg.NewClient(client)
@@ -115,12 +118,14 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 			}
 		}
 
-		reactedMsgID = targetMsg.ID
 		log.Printf("Реакция %s успешно отправлена", reaction)
+		// Сохраняем ID сообщения и ID чата обсуждения
+		reactedMsgID = targetMsg.ID
+		chatID = discussionChat.ID
 		return nil
 	})
 
-	return reactedMsgID, err
+	return reactedMsgID, chatID, err
 }
 
 var reactionList = []string{"❤️", "👍"}
