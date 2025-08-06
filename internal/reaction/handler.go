@@ -104,6 +104,7 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
                        account.ApiHash,
                        request.MsgCount,
                )
+
 		if err != nil {
 			log.Printf("[HANDLER ERROR] Ошибка отправки реакции для %s: %v", account.Phone, err)
 			errorCount++

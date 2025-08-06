@@ -116,6 +116,7 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
                        account.ApiHash,
                        request.PostsCount,
                        func(channelID, messageID int) (bool, error) {
+
 				exists, err := h.DB.HasCommentForPost(channelID, messageID)
 				if err != nil {
 					return false, err
