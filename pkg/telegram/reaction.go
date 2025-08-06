@@ -12,19 +12,23 @@ import (
 	"github.com/gotd/td/tg"
 )
 
-// SendReaction выполняет добавление реакции к последнему сообщению обсуждения
-// канала. Возвращает ID сообщения и ID чата, в котором была поставлена реакция.
+// SendReaction добавляет реакцию к последнему сообщению обсуждения канала.
+// Возвращает ID сообщения, к которому была поставлена реакция (int),
+// ID чата обсуждения (int) и ошибку.
+// При неудаче оба идентификатора равны 0.
 func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount int) (int, int, error) {
 	log.Printf("[START] Отправка реакции в канал %s от имени %s", channelURL, phone)
 
 	username, err := module.Modf_ExtractUsername(channelURL)
 	if err != nil {
-		return 0, fmt.Errorf("не удалось извлечь имя пользователя: %w", err)
+		// Возвращаем нулевые идентификаторы при ошибке извлечения username
+		return 0, 0, fmt.Errorf("не удалось извлечь имя пользователя: %w", err)
 	}
 
 	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone)
 	if err != nil {
-		return 0, err
+		// При ошибке инициализации возвращаем нулевые идентификаторы
+		return 0, 0, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -121,7 +125,8 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 		log.Printf("Реакция %s успешно отправлена", reaction)
 		// Сохраняем ID сообщения и ID чата обсуждения
 		reactedMsgID = targetMsg.ID
-		chatID = discussionChat.ID
+		// Преобразуем идентификатор чата из int64 в int для дальнейшего использования
+		chatID = int(discussionChat.ID)
 		return nil
 	})
 
