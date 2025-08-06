@@ -1,13 +1,15 @@
 package storage
 
+import "time"
+
 // ActivityTypeReaction — значение поля activity_type для реакций.
 const ActivityTypeReaction = "reaction"
 
-// SaveActivity persists an account action in the activity table.
+// SaveActivity сохраняет действие аккаунта в таблице activity вместе со временем.
 func (db *DB) SaveActivity(accountID, channelID, messageID int, activityType string) error {
 	_, err := db.Conn.Exec(
-		`INSERT INTO activity (id_account, id_channel, id_message, activity_type) VALUES ($1, $2, $3, $4)`,
-		accountID, channelID, messageID, activityType,
+		`INSERT INTO activity (id_account, id_channel, id_message, activity_type, date_time) VALUES ($1, $2, $3, $4, $5)`,
+		accountID, channelID, messageID, activityType, time.Now(),
 	)
 	return err
 }

@@ -106,14 +106,16 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		}
 		log.Printf("[HANDLER INFO] Selected channel for %s: %s", account.Phone, channelURL)
 
-		// Отправка комментария в выбранный канал
-		msgID, channelID, err := telegram.SendComment(
-			account.Phone,
-			channelURL,
-			account.ApiID,
-			account.ApiHash,
-			request.PostsCount,
-			func(channelID, messageID int) (bool, error) {
+               // Отправка комментария в выбранный канал
+               msgID, _, err := telegram.SendComment(
+                       h.DB,
+                       account.ID,
+                       account.Phone,
+                       channelURL,
+                       account.ApiID,
+                       account.ApiHash,
+                       request.PostsCount,
+                       func(channelID, messageID int) (bool, error) {
 				exists, err := h.DB.HasCommentForPost(channelID, messageID)
 				if err != nil {
 					return false, err
@@ -132,8 +134,6 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 			continue
 		}
 
-		h.recordComment(account.ID, channelID, msgID)
-
 		successCount++
 		log.Printf("[HANDLER DEBUG] Success for account: %s", account.Phone)
 	}
@@ -147,10 +147,4 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 	}
 	log.Printf("[HANDLER INFO] Final result: %+v", result)
 	c.JSON(http.StatusOK, result)
-}
-
-func (h *CommentHandler) recordComment(accountID, channelID, messageID int) {
-	if err := h.DB.SaveActivity(accountID, channelID, messageID, "comment"); err != nil {
-		log.Printf("Failed to save activity for account %d: %v", accountID, err)
-	}
 }

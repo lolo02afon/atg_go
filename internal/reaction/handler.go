@@ -95,13 +95,15 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 		}
 		log.Printf("[HANDLER INFO] Выбран канал для %s: %s", account.Phone, channelURL)
 
-		msgID, channelID, err := telegram.SendReaction(
-			account.Phone,
-			channelURL,
-			account.ApiID,
-			account.ApiHash,
-			request.MsgCount,
-		)
+               msgID, _, err := telegram.SendReaction(
+                       h.DB,
+                       account.ID,
+                       account.Phone,
+                       channelURL,
+                       account.ApiID,
+                       account.ApiHash,
+                       request.MsgCount,
+               )
 		if err != nil {
 			log.Printf("[HANDLER ERROR] Ошибка отправки реакции для %s: %v", account.Phone, err)
 			errorCount++
@@ -111,8 +113,6 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 			log.Printf("[HANDLER INFO] Не найдено подходящих сообщений для аккаунта %s", account.Phone)
 			continue
 		}
-
-		h.recordReaction(account.ID, channelID, msgID)
 
 		successCount++
 		log.Printf("[HANDLER DEBUG] Успех для аккаунта: %s", account.Phone)
@@ -126,11 +126,4 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 	}
 	log.Printf("[HANDLER INFO] Итог: %+v", result)
 	c.JSON(http.StatusOK, result)
-}
-
-// recordReaction сохраняет информацию о поставленной реакции в таблице activity.
-func (h *ReactionHandler) recordReaction(accountID, channelID, messageID int) {
-	if err := h.DB.SaveReaction(accountID, channelID, messageID); err != nil {
-		log.Printf("Не удалось сохранить активность для аккаунта %d: %v", accountID, err)
-	}
 }
