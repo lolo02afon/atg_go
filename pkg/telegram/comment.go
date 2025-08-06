@@ -136,6 +136,7 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 			if err := module.SaveActivity(db, accountID, channelID, msgID, "comment"); err != nil {
 				return fmt.Errorf("не удалось сохранить активность: %w", err)
 			}
+
 			return nil
 		}
 
