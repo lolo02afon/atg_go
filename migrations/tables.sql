@@ -20,8 +20,8 @@ CREATE TABLE IF NOT EXISTS channels (
 CREATE TABLE IF NOT EXISTS activity (
     id SERIAL PRIMARY KEY,
     id_account INTEGER NOT NULL,
-    id_channel INTEGER NOT NULL,
-    id_message INTEGER NOT NULL,
+    id_channel BIGINT NOT NULL,
+    id_message BIGINT NOT NULL,
     activity_type TEXT NOT NULL,
     date_time TIMESTAMP NOT NULL DEFAULT NOW()
 );
