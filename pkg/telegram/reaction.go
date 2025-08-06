@@ -14,7 +14,7 @@ import (
 
 // SendReaction добавляет реакцию к последнему сообщению обсуждения канала.
 // Возвращает ID сообщения, к которому была поставлена реакция (int),
-// ID чата обсуждения (int) и ошибку.
+// ID исходного канала (int) и ошибку.
 // При неудаче оба идентификатора равны 0.
 func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount int) (int, int, error) {
 	log.Printf("[START] Отправка реакции в канал %s от имени %s", channelURL, phone)
@@ -36,7 +36,7 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 
 	var (
 		reactedMsgID int
-		chatID       int
+		channelID    int
 	)
 
 	err = client.Run(ctx, func(ctx context.Context) error {
@@ -123,14 +123,14 @@ func SendReaction(phone, channelURL string, apiID int, apiHash string, msgCount 
 		}
 
 		log.Printf("Реакция %s успешно отправлена", reaction)
-		// Сохраняем ID сообщения и ID чата обсуждения
+		// Сохраняем ID сообщения и ID канала
 		reactedMsgID = targetMsg.ID
-		// Преобразуем идентификатор чата из int64 в int для дальнейшего использования
-		chatID = int(discussionChat.ID)
+		// Преобразуем идентификатор канала из int64 в int для дальнейшего использования
+		channelID = int(channel.ID)
 		return nil
 	})
 
-	return reactedMsgID, chatID, err
+	return reactedMsgID, channelID, err
 }
 
 var reactionList = []string{"❤️", "👍"}

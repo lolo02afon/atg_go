@@ -15,7 +15,7 @@ import (
 // SendComment подключается к Telegram, находит случайный пост в указанном канале
 // и отправляет случайный эмодзи в обсуждение этого поста.
 // Возвращает ID сообщения, к которому был оставлен комментарий (int),
-// ID чата обсуждения (int) и ошибку.
+// ID исходного канала (int) и ошибку.
 // При неудаче оба идентификатора равны 0.
 func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount int, canSend func(channelID, messageID int) (bool, error), userIDs []int) (int, int, error) {
 	log.Printf("[START] Отправка эмодзи в канал %s от имени %s", channelURL, phone)
@@ -39,8 +39,8 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 	defer cancel() // Гарантируем отмену контекста при выходе из функции
 
 	var (
-		msgID  int
-		chatID int
+		msgID     int
+		channelID int
 	)
 
 	// Запускаем клиент и выполняем операции
@@ -97,8 +97,8 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 			replyToMsgID := discussionData.PostMessage.ID
 
 			if canSend != nil {
-				// Преобразуем идентификатор чата обсуждения из int64 в int для совместимости
-				allowed, err := canSend(int(discussionData.Chat.ID), replyToMsgID)
+				// Используем ID исходного канала при проверке возможности отправки
+				allowed, err := canSend(int(channel.ID), replyToMsgID)
 				if err != nil {
 					return err
 				}
@@ -125,8 +125,8 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 				return err
 			}
 			msgID = replyToMsgID
-			// Сохраняем ID чата обсуждения, приводя его к типу int
-			chatID = int(discussionData.Chat.ID)
+			// Сохраняем ID канала, приводя его к типу int
+			channelID = int(channel.ID)
 			return nil
 		}
 
@@ -134,7 +134,7 @@ func SendComment(phone, channelURL string, apiID int, apiHash string, postsCount
 
 	})
 
-	return msgID, chatID, err
+	return msgID, channelID, err
 }
 
 var emojiList = []string{
