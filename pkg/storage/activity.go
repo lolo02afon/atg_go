@@ -5,6 +5,9 @@ import "time"
 // ActivityTypeReaction — значение поля activity_type для реакций.
 const ActivityTypeReaction = "reaction"
 
+// ActivityTypeComment — значение поля activity_type для комментариев.
+const ActivityTypeComment = "comment"
+
 // SaveActivity сохраняет действие аккаунта в таблице activity вместе со временем.
 func (db *DB) SaveActivity(accountID, channelID, messageID int, activityType string) error {
 	_, err := db.Conn.Exec(
@@ -17,6 +20,12 @@ func (db *DB) SaveActivity(accountID, channelID, messageID int, activityType str
 // SaveReaction сохраняет информацию о реакции в таблице activity.
 func (db *DB) SaveReaction(accountID, channelID, messageID int) error {
 	return db.SaveActivity(accountID, channelID, messageID, ActivityTypeReaction)
+}
+
+// SaveComment сохраняет информацию о комментарии в таблице activity.
+// messageID — идентификатор поста, к которому оставлен комментарий.
+func (db *DB) SaveComment(accountID, channelID, messageID int) error {
+	return db.SaveActivity(accountID, channelID, messageID, ActivityTypeComment)
 }
 
 // HasComment проверяет, оставляла ли учетная запись комментарий к указанному посту.
