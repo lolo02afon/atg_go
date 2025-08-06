@@ -128,9 +128,9 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
-// recordReaction сохраняет информацию об активности в базе.
+// recordReaction сохраняет информацию о поставленной реакции в таблице activity.
 func (h *ReactionHandler) recordReaction(accountID, channelID, messageID int) {
-	if err := h.DB.SaveActivity(accountID, channelID, messageID, "reaction"); err != nil {
+	if err := h.DB.SaveReaction(accountID, channelID, messageID); err != nil {
 		log.Printf("Не удалось сохранить активность для аккаунта %d: %v", accountID, err)
 	}
 }
