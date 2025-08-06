@@ -183,7 +183,8 @@ func selectTargetMessage(messages []*tg.Message, db *storage.DB, accountID, chan
 		if len(m.Reactions.Results) != 0 {
 			continue
 		}
-		canReact, err := db.CanReactOnMessage(accountID, channelID, m.ID)
+               // Проверяем возможность реакции с учётом последнего ID аккаунта
+               canReact, err := db.CanReactOnMessage(accountID, channelID, m.ID)
 		if err != nil {
 			return nil, err
 		}
