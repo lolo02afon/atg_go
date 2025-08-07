@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"sort"
 	"strings"
 
 	"atg_go/models"
@@ -54,6 +55,11 @@ func GetChannelPosts(ctx context.Context, api *tg.Client, channel *tg.Channel, l
 	if len(validMessages) == 0 {
 		return nil, fmt.Errorf("no valid messages")
 	}
+
+	// Сортируем сообщения по убыванию ID, чтобы новые были первыми
+	sort.Slice(validMessages, func(i, j int) bool {
+		return validMessages[i].ID > validMessages[j].ID
+	})
 
 	return validMessages, nil
 }
