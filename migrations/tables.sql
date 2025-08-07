@@ -5,7 +5,6 @@ CREATE TABLE IF NOT EXISTS proxy (
     port INTEGER NOT NULL,
     login TEXT,
     password TEXT,
-    type TEXT,
     ipv6 TEXT,
     account_count INTEGER NOT NULL DEFAULT 0,
     is_active BOOLEAN NULL
