@@ -95,15 +95,16 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 		}
 		log.Printf("[HANDLER INFO] Выбран канал для %s: %s", account.Phone, channelURL)
 
-               msgID, _, err := telegram.SendReaction(
-                       h.DB,
-                       account.ID,
-                       account.Phone,
-                       channelURL,
-                       account.ApiID,
-                       account.ApiHash,
-                       request.MsgCount,
-               )
+		msgID, _, err := telegram.SendReaction(
+			h.DB,
+			account.ID,
+			account.Phone,
+			channelURL,
+			account.ApiID,
+			account.ApiHash,
+			request.MsgCount,
+			account.Proxy,
+		)
 
 		if err != nil {
 			log.Printf("[HANDLER ERROR] Ошибка отправки реакции для %s: %v", account.Phone, err)

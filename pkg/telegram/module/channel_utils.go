@@ -6,6 +6,8 @@ import (
 	"math/rand"
 	"strings"
 
+	"atg_go/models"
+
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/tg"
 )
@@ -110,13 +112,17 @@ func Modf_GetRandomChannelPost(ctx context.Context, api *tg.Client, channel *tg.
 }
 
 // Создаем клиент Telegram с указанными параметрами
-func Modf_AccountInitialization(apiID int, apiHash, phone string) (*telegram.Client, error) {
-
-	client := telegram.NewClient(apiID, apiHash, telegram.Options{
+func Modf_AccountInitialization(apiID int, apiHash, phone string, p *models.Proxy, r *rand.Rand) (*telegram.Client, error) {
+	opts := telegram.Options{
 		SessionStorage: &telegram.FileSessionStorage{
 			Path: "sessions/" + phone + ".session.json",
 		},
-	})
-
+	}
+	if r != nil {
+		opts.Random = r
+	}
+	// TODO: proxy support can be added here using custom dialer.
+	_ = p
+	client := telegram.NewClient(apiID, apiHash, opts)
 	return client, nil
 }
