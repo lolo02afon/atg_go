@@ -3,10 +3,16 @@ package module
 import (
 	"context"
 	"fmt"
+	"log"
 	"math/rand"
 	"strings"
 
+	"atg_go/models"
+
+	"golang.org/x/net/proxy"
+
 	"github.com/gotd/td/telegram"
+	"github.com/gotd/td/telegram/dcs"
 	"github.com/gotd/td/tg"
 )
 
@@ -110,13 +116,32 @@ func Modf_GetRandomChannelPost(ctx context.Context, api *tg.Client, channel *tg.
 }
 
 // Создаем клиент Telegram с указанными параметрами
-func Modf_AccountInitialization(apiID int, apiHash, phone string) (*telegram.Client, error) {
-
-	client := telegram.NewClient(apiID, apiHash, telegram.Options{
+func Modf_AccountInitialization(apiID int, apiHash, phone string, p *models.Proxy, r *rand.Rand) (*telegram.Client, error) {
+	opts := telegram.Options{
 		SessionStorage: &telegram.FileSessionStorage{
 			Path: "sessions/" + phone + ".session.json",
 		},
-	})
-
+	}
+	if r != nil {
+		opts.Random = r
+	}
+	if p != nil {
+		addr := fmt.Sprintf("%s:%d", p.IP, p.Port)
+		var auth *proxy.Auth
+		if p.Login != "" || p.Password != "" {
+			auth = &proxy.Auth{User: p.Login, Password: p.Password}
+		}
+		d, err := proxy.SOCKS5("tcp", addr, auth, proxy.Direct)
+		if err != nil {
+			return nil, fmt.Errorf("proxy dialer: %w", err)
+		}
+		dc, ok := d.(proxy.ContextDialer)
+		if !ok {
+			return nil, fmt.Errorf("proxy dialer missing context")
+		}
+		opts.Resolver = dcs.Plain(dcs.PlainOptions{Dial: dc.DialContext})
+		log.Printf("[PROXY] %s via %s", phone, addr)
+	}
+	client := telegram.NewClient(apiID, apiHash, opts)
 	return client, nil
 }

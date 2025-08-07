@@ -8,7 +8,8 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/gotd/td/telegram"
+	"atg_go/models"
+
 	"github.com/gotd/td/telegram/auth"
 	"github.com/gotd/td/tg"
 )
@@ -40,20 +41,18 @@ func (a AuthHelper) AcceptTermsOfService(ctx context.Context, tos tg.HelpTermsOf
 	return nil
 }
 
-func RequestCode(apiID int, apiHash, phone string) (string, error) {
-
-	// Создаем клиент Telegram с указанными параметрами
-	client, _ := module.Modf_AccountInitialization(apiID, apiHash, phone)
-
+func RequestCode(apiID int, apiHash, phone string, proxy *models.Proxy) (string, error) {
+	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, nil)
+	if err != nil {
+		return "", err
+	}
 	var phoneCodeHash string
 	ctx := context.Background()
-
-	err := client.Run(ctx, func(ctx context.Context) error {
+	err = client.Run(ctx, func(ctx context.Context) error {
 		sentCode, err := client.Auth().SendCode(ctx, phone, auth.SendCodeOptions{})
 		if err != nil {
 			return err
 		}
-
 		if sentCode, ok := sentCode.(*tg.AuthSentCode); ok {
 			phoneCodeHash = sentCode.PhoneCodeHash
 			log.Printf("[DEBUG] Received phone_code_hash: %s", phoneCodeHash)
@@ -63,22 +62,19 @@ func RequestCode(apiID int, apiHash, phone string) (string, error) {
 			log.Printf("[ERROR] Unexpected sent code type: %T", sentCode)
 			return fmt.Errorf("unexpected sent code type: %T", sentCode)
 		}
-
 		return nil
 	})
-
 	return phoneCodeHash, err
 }
 
-func CompleteAuthorization(apiID int, apiHash, phone, code, phoneCodeHash string) error {
+func CompleteAuthorization(apiID int, apiHash, phone, code, phoneCodeHash string, proxy *models.Proxy) error {
 	log.Printf("[DEBUG] Starting authorization for phone: %s", phone)
 
 	randSrc := rand.New(rand.NewSource(time.Now().UnixNano()))
-	client := telegram.NewClient(apiID, apiHash, telegram.Options{
-		SessionStorage: &telegram.FileSessionStorage{Path: "sessions/" + phone + ".session.json"},
-		Random:         randSrc,
-	})
-
+	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, randSrc)
+	if err != nil {
+		return err
+	}
 	ctx := context.Background()
 	return client.Run(ctx, func(ctx context.Context) error {
 		helper := AuthHelper{
