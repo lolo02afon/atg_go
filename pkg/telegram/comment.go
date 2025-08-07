@@ -92,6 +92,13 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 			return fmt.Errorf("не удалось получить историю канала: %w", err)
 		}
 
+		// Если последний сохранённый ID больше, чем у самого нового поста в канале,
+		// вероятно, в базе сохранён ID из чата обсуждения. Сбрасываем lastID.
+		if lastID > 0 && len(posts) > 0 && lastID > posts[0].ID {
+			log.Printf("[DEBUG] Последний ID %d больше максимального ID %d, сброс", lastID, posts[0].ID)
+			lastID = 0
+		}
+
 		idSet := make(map[int]struct{}, len(userIDs))
 		for _, id := range userIDs {
 			idSet[id] = struct{}{}
@@ -125,12 +132,12 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 
 			if canSend != nil {
 				// Используем ID исходного канала при проверке возможности отправки
-				allowed, err := canSend(int(channel.ID), replyToMsgID)
+				allowed, err := canSend(int(channel.ID), p.ID)
 				if err != nil {
 					return err
 				}
 				if !allowed {
-					log.Printf("[INFO] Пост %d уже комментирован нашими аккаунтами, пропуск для %s", replyToMsgID, phone)
+					log.Printf("[INFO] Пост %d уже комментирован нашими аккаунтами, пропуск для %s", p.ID, phone)
 					continue
 				}
 			}
@@ -141,7 +148,7 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 				continue
 			}
 			if hasOwn {
-				log.Printf("[INFO] Пост %d уже комментирован нашими аккаунтами, пропуск для %s", replyToMsgID, phone)
+				log.Printf("[INFO] Пост %d уже комментирован нашими аккаунтами, пропуск для %s", p.ID, phone)
 				continue
 			}
 
@@ -153,8 +160,8 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 				return err
 			}
 
-			// Сохраняем ID исходного поста
-			msgID = replyToMsgID
+			// Сохраняем ID исходного поста (из канала)
+			msgID = p.ID
 			// Записываем активность в таблицу activity по ID поста
 			if err := module.SaveCommentActivity(db, accountID, channelID, msgID); err != nil {
 				return fmt.Errorf("не удалось сохранить активность: %w", err)
