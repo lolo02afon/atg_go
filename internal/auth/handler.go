@@ -26,14 +26,26 @@ func (h *AccountHandler) CreateAccount(c *gin.Context) {
 		return
 	}
 
-	// Запрашиваем код у Telegram
-	hash, err := telegram.RequestCode(account.ApiID, account.ApiHash, account.Phone)
+	var proxy *models.Proxy
+	if account.ProxyID != nil {
+		p, err := h.DB.GetProxyByID(*account.ProxyID)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Proxy not found"})
+			return
+		}
+		if p.AccountsCount >= 30 {
+			c.JSON(400, gin.H{"error": "Proxy limit reached"})
+			return
+		}
+		proxy = p
+	}
+
+	hash, err := telegram.RequestCode(account.ApiID, account.ApiHash, account.Phone, proxy)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to request code"})
 		return
 	}
 
-	// Сохраняем hash в аккаунт
 	account.PhoneCodeHash = hash
 	created, err := h.DB.CreateAccount(account)
 	if err != nil {
@@ -41,9 +53,7 @@ func (h *AccountHandler) CreateAccount(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{
-		"id": created.ID,
-	})
+	c.JSON(200, gin.H{"id": created.ID})
 }
 
 func (h *AccountHandler) VerifyAccount(c *gin.Context) {
@@ -71,6 +81,7 @@ func (h *AccountHandler) VerifyAccount(c *gin.Context) {
 		account.Phone,
 		input.Code,
 		account.PhoneCodeHash,
+		account.Proxy,
 	); err != nil {
 		c.JSON(400, gin.H{"error": "Auth failed: " + err.Error()})
 		return

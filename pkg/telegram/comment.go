@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"time"
 
+	"atg_go/models"
 	"atg_go/pkg/storage"
 	module "atg_go/pkg/telegram/module"
 
@@ -19,7 +20,7 @@ import (
 // Возвращает ID поста, к которому оставлен комментарий (int),
 // ID исходного канала (int) и ошибку.
 // При неудаче оба идентификатора равны 0.
-func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID int, apiHash string, postsCount int, canSend func(channelID, messageID int) (bool, error), userIDs []int) (int, int, error) {
+func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID int, apiHash string, postsCount int, canSend func(channelID, messageID int) (bool, error), userIDs []int, proxy *models.Proxy) (int, int, error) {
 	log.Printf("[START] Отправка эмодзи в канал %s от имени %s", channelURL, phone)
 
 	// Извлекаем username из URL канала (например, из "https://t.me/channel" извлекаем "channel")
@@ -30,7 +31,7 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 	}
 
 	// Создаем клиент Telegram с указанными параметрами
-	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone)
+	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, nil)
 	if err != nil {
 		// При ошибке инициализации также возвращаем нулевые идентификаторы
 		return 0, 0, err

@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"time"
 
+	"atg_go/models"
 	"atg_go/pkg/storage"
 	module "atg_go/pkg/telegram/module"
 
@@ -18,7 +19,7 @@ import (
 // Возвращает ID сообщения, к которому была поставлена реакция (int),
 // ID исходного канала (int) и ошибку.
 // При неудаче оба идентификатора равны 0.
-func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID int, apiHash string, msgCount int) (int, int, error) {
+func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID int, apiHash string, msgCount int, proxy *models.Proxy) (int, int, error) {
 	log.Printf("[START] Отправка реакции в канал %s от имени %s", channelURL, phone)
 
 	username, err := module.Modf_ExtractUsername(channelURL)
@@ -27,7 +28,7 @@ func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID
 		return 0, 0, fmt.Errorf("не удалось извлечь имя пользователя: %w", err)
 	}
 
-	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone)
+	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, nil)
 	if err != nil {
 		// При ошибке инициализации возвращаем нулевые идентификаторы
 		return 0, 0, err

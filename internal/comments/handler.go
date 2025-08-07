@@ -60,7 +60,7 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 	// Собираем ID наших аккаунтов в Telegram
 	var userIDs []int
 	for _, acc := range accounts {
-		id, err := telegram.GetUserID(acc.Phone, acc.ApiID, acc.ApiHash)
+		id, err := telegram.GetUserID(acc.Phone, acc.ApiID, acc.ApiHash, acc.Proxy)
 		if err != nil {
 			log.Printf("[HANDLER WARN] Не удалось получить ID для %s: %v", acc.Phone, err)
 			continue
@@ -106,16 +106,16 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		}
 		log.Printf("[HANDLER INFO] Selected channel for %s: %s", account.Phone, channelURL)
 
-               // Отправка комментария в выбранный канал
-               msgID, _, err := telegram.SendComment(
-                       h.DB,
-                       account.ID,
-                       account.Phone,
-                       channelURL,
-                       account.ApiID,
-                       account.ApiHash,
-                       request.PostsCount,
-                       func(channelID, messageID int) (bool, error) {
+		// Отправка комментария в выбранный канал
+		msgID, _, err := telegram.SendComment(
+			h.DB,
+			account.ID,
+			account.Phone,
+			channelURL,
+			account.ApiID,
+			account.ApiHash,
+			request.PostsCount,
+			func(channelID, messageID int) (bool, error) {
 
 				exists, err := h.DB.HasCommentForPost(channelID, messageID)
 				if err != nil {
@@ -124,6 +124,7 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 				return !exists, nil
 			},
 			userIDs,
+			account.Proxy,
 		)
 		if err != nil {
 			log.Printf("[HANDLER ERROR] Failed for %s: %v", account.Phone, err)
