@@ -85,6 +85,33 @@ func (db *DB) GetLastReactionMessageID(accountID, channelID int) (int, error) {
 	return messageID, nil
 }
 
+// GetLastCommentMessageID возвращает числовой ID последнего сообщения,
+// к которому аккаунт оставил комментарий в указанном канале.
+// Если комментариев ещё не было, возвращается 0 и nil.
+// В случае ошибки запроса или если значение id_message невозможно
+// преобразовать в целое число, функция возвращает 0 и ошибку.
+func (db *DB) GetLastCommentMessageID(accountID, channelID int) (int, error) {
+	var messageIDStr string
+	chID := strconv.FormatInt(int64(channelID), 10)
+	err := db.Conn.QueryRow(
+		`SELECT id_message FROM activity
+                 WHERE id_account = $1 AND id_channel = $2 AND activity_type = $3
+                 ORDER BY date_time DESC LIMIT 1`,
+		accountID, chID, ActivityTypeComment,
+	).Scan(&messageIDStr)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	messageID, convErr := strconv.Atoi(messageIDStr)
+	if convErr != nil {
+		return 0, convErr
+	}
+	return messageID, nil
+}
+
 // CanReactOnMessage проверяет, можно ли аккаунту поставить реакцию на
 // сообщение с указанным ID в заданном канале. Разница между ID должна быть
 // не менее 10. Если аккаунт ещё не ставил реакций в канале, возвращает true.

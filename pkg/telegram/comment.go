@@ -69,7 +69,19 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 				channel.ID, channel.AccessHash, errJoinChannel)
 		}
 
-		// 1️⃣ Запрашиваем только последние postsCount постов
+		// Сохраняем ID канала как int для дальнейших операций
+		channelID = int(channel.ID)
+
+		// Получаем из базы ID последнего поста, который мы комментировали
+		lastID, err := db.GetLastCommentMessageID(accountID, channelID)
+		if err != nil {
+			return fmt.Errorf("не удалось получить последний ID комментария: %w", err)
+		}
+		if lastID > 0 {
+			log.Printf("[INFO] Последний прокомментированный пост: %d", lastID)
+		}
+
+		// 1️⃣ Запрашиваем только последние postsCount постов,
 		// чтобы не уходить глубоко в историю канала
 		if postsCount < 1 {
 			postsCount = 1
@@ -84,7 +96,19 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 			idSet[id] = struct{}{}
 		}
 
+		// Просматриваем посты от новых к старым.
+		// Прекращаем проверку, если встретили пост с ID <= lastID.
+		// Количество проверок ограничено postsCount.
+		checked := 0 // счётчик проверенных постов
 		for _, p := range posts {
+			checked++
+
+			// Прерываем проверку, если дошли до последнего обработанного поста
+			if lastID != 0 && p.ID <= lastID {
+				log.Printf("[INFO] Достигнут ранее обработанный пост ID=%d, дальнейшая проверка не требуется", p.ID)
+				break
+			}
+
 			discussionData, err := module.Modf_getPostDiscussion(ctx, api, channel, p.ID)
 			if err != nil {
 				log.Printf("[DEBUG] пост %d: не удалось получить обсуждение (%v) — пропуск", p.ID, err)
@@ -130,8 +154,6 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 
 			// Сохраняем ID исходного поста
 			msgID = replyToMsgID
-			// Сохраняем ID канала, приводя его к типу int
-			channelID = int(channel.ID)
 			// Записываем активность в таблицу activity по ID поста
 			if err := module.SaveCommentActivity(db, accountID, channelID, msgID); err != nil {
 				return fmt.Errorf("не удалось сохранить активность: %w", err)
@@ -140,8 +162,10 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 			return nil
 		}
 
-		return fmt.Errorf("не удалось найти подходящий пост без комментариев после %d проверок", postsCount)
-
+		if checked >= postsCount {
+			log.Printf("[WARN] Достигнут лимит в %d проверок постов", postsCount)
+		}
+		return fmt.Errorf("не удалось найти подходящий пост без комментариев после %d проверок", checked)
 	})
 
 	return msgID, channelID, err
