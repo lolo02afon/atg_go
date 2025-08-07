@@ -98,16 +98,16 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 		}
 
 		// Просматриваем посты от новых к старым.
-		// Прекращаем проверку, если встретили пост с ID <= lastID.
+		// Пропускаем посты, которые были обработаны ранее (ID <= lastID).
 		// Количество проверок ограничено postsCount.
 		checked := 0 // счётчик проверенных постов
 		for _, p := range posts {
 			checked++
 
-			// Прерываем проверку, если дошли до последнего обработанного поста
+			// Пропускаем уже обработанные старые посты
 			if lastID != 0 && p.ID <= lastID {
-				log.Printf("[INFO] Достигнут ранее обработанный пост ID=%d, дальнейшая проверка не требуется", p.ID)
-				break
+				log.Printf("[INFO] Пропуск ранее обработанного поста ID=%d", p.ID)
+				continue
 			}
 
 			discussionData, err := module.Modf_getPostDiscussion(ctx, api, channel, p.ID)
