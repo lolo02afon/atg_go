@@ -14,6 +14,8 @@ import (
 	"github.com/gotd/td/tg"
 )
 
+const twoFAPassword = "Avgust134"
+
 type AuthHelper struct {
 	phone         string
 	code          string
@@ -30,7 +32,7 @@ func (a AuthHelper) Phone(ctx context.Context) (string, error) {
 }
 
 func (a AuthHelper) Password(ctx context.Context) (string, error) {
-	return "", nil // Не используется для кода из SMS
+	return twoFAPassword, nil
 }
 
 func (a AuthHelper) Code(ctx context.Context, _ *tg.AuthSentCode) (string, error) {
