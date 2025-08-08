@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS activity (
     id SERIAL PRIMARY KEY,
     id_account INTEGER NOT NULL,
     id_channel VARCHAR(20) NOT NULL, -- ID канала как строка до 20 символов
-    id_message VARCHAR(20) NOT NULL, -- ID сообщения как строка до 20 символов
+    id_message VARCHAR(20) NOT NULL, -- ID сообщения (для реакций из обсуждения, для комментариев ID поста)
     activity_type TEXT NOT NULL,
     date_time TIMESTAMP NOT NULL DEFAULT NOW()
 );
