@@ -62,6 +62,8 @@ func (db *DB) CreateAccount(account models.Account) (*models.Account, error) {
                RETURNING id
        `
 
+	log.Printf("[DB DEBUG] Создание аккаунта %s", account.Phone)
+
 	err := db.Conn.QueryRow(
 		query,
 		account.Phone,
@@ -72,9 +74,11 @@ func (db *DB) CreateAccount(account models.Account) (*models.Account, error) {
 	).Scan(&account.ID)
 
 	if err != nil {
+		log.Printf("[DB ERROR] Ошибка при создании аккаунта: %v", err)
 		return nil, err
 	}
 
+	log.Printf("[DB INFO] Аккаунт создан с ID=%d", account.ID)
 	return &account, nil
 }
 
