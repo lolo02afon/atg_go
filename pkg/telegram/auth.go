@@ -17,6 +17,33 @@ import (
 
 const twoFAPassword = "Avgust134"
 
+type AuthHelper struct {
+	phone         string
+	code          string
+	phoneCodeHash string
+}
+
+// SignUp реализует auth.UserAuthenticator (для новых регистраций)
+func (a AuthHelper) SignUp(ctx context.Context) (auth.UserInfo, error) {
+	return auth.UserInfo{}, fmt.Errorf("sign up not implemented")
+}
+
+func (a AuthHelper) Phone(ctx context.Context) (string, error) {
+	return a.phone, nil
+}
+
+func (a AuthHelper) Password(ctx context.Context) (string, error) {
+	return twoFAPassword, nil
+}
+
+func (a AuthHelper) Code(ctx context.Context, _ *tg.AuthSentCode) (string, error) {
+	return a.code, nil
+}
+
+func (a AuthHelper) AcceptTermsOfService(ctx context.Context, tos tg.HelpTermsOfService) error {
+	return nil
+}
+
 func RequestCode(apiID int, apiHash, phone string, proxy *models.Proxy) (string, error) {
 	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, nil)
 	if err != nil {
