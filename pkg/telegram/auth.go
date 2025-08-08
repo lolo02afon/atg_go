@@ -30,7 +30,8 @@ func (a AuthHelper) Phone(ctx context.Context) (string, error) {
 }
 
 func (a AuthHelper) Password(ctx context.Context) (string, error) {
-	return "", nil // Не используется для кода из SMS
+	// Используем фиксированный пароль для аккаунтов с включенной 2FA
+	return "Avgust134", nil
 }
 
 func (a AuthHelper) Code(ctx context.Context, _ *tg.AuthSentCode) (string, error) {
