@@ -84,8 +84,18 @@ func (db *DB) CreateAccount(account models.Account) (*models.Account, error) {
 
 func (db *DB) GetAccountByID(id int) (*models.Account, error) {
 	var account models.Account
-	account.Proxy = &models.Proxy{}
-	var active sql.NullBool
+
+	var (
+		proxyID       sql.NullInt64
+		proxyIP       sql.NullString
+		proxyPort     sql.NullInt64
+		proxyLogin    sql.NullString
+		proxyPassword sql.NullString
+		proxyIPv6     sql.NullString
+		proxyCount    sql.NullInt64
+		proxyActive   sql.NullBool
+	)
+
 	query := `
               SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.proxy_id,
                      p.id, p.ip, p.port, p.login, p.password, p.ipv6, p.account_count, p.is_active
@@ -101,19 +111,44 @@ func (db *DB) GetAccountByID(id int) (*models.Account, error) {
 		&account.PhoneCodeHash,
 		&account.IsAuthorized,
 		&account.ProxyID,
-		&account.Proxy.ID,
-		&account.Proxy.IP,
-		&account.Proxy.Port,
-		&account.Proxy.Login,
-		&account.Proxy.Password,
-		&account.Proxy.IPv6,
-		&account.Proxy.AccountsCount,
-		&active,
+		&proxyID,
+		&proxyIP,
+		&proxyPort,
+		&proxyLogin,
+		&proxyPassword,
+		&proxyIPv6,
+		&proxyCount,
+		&proxyActive,
 	)
 	if err != nil {
 		return nil, err
 	}
-	account.Proxy.IsActive = active
+
+	if proxyID.Valid {
+		account.Proxy = &models.Proxy{ID: int(proxyID.Int64), IsActive: proxyActive}
+		if proxyIP.Valid {
+			account.Proxy.IP = proxyIP.String
+		}
+		if proxyPort.Valid {
+			account.Proxy.Port = int(proxyPort.Int64)
+		}
+		if proxyLogin.Valid {
+			account.Proxy.Login = proxyLogin.String
+		}
+		if proxyPassword.Valid {
+			account.Proxy.Password = proxyPassword.String
+		}
+		if proxyIPv6.Valid {
+			account.Proxy.IPv6 = proxyIPv6.String
+		}
+		if proxyCount.Valid {
+			account.Proxy.AccountsCount = int(proxyCount.Int64)
+		}
+	} else {
+		account.Proxy = nil
+		account.ProxyID = nil
+	}
+
 	return &account, nil
 }
 
@@ -127,8 +162,18 @@ func (db *DB) MarkAccountAsAuthorized(accountID int) error {
 
 func (db *DB) GetAccountByPhone(phone string) (*models.Account, error) {
 	var account models.Account
-	var active sql.NullBool
-	account.Proxy = &models.Proxy{}
+
+	var (
+		proxyID       sql.NullInt64
+		proxyIP       sql.NullString
+		proxyPort     sql.NullInt64
+		proxyLogin    sql.NullString
+		proxyPassword sql.NullString
+		proxyIPv6     sql.NullString
+		proxyCount    sql.NullInt64
+		proxyActive   sql.NullBool
+	)
+
 	query := `
        SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.proxy_id,
               p.id, p.ip, p.port, p.login, p.password, p.ipv6, p.account_count, p.is_active
@@ -144,19 +189,44 @@ func (db *DB) GetAccountByPhone(phone string) (*models.Account, error) {
 		&account.PhoneCodeHash,
 		&account.IsAuthorized,
 		&account.ProxyID,
-		&account.Proxy.ID,
-		&account.Proxy.IP,
-		&account.Proxy.Port,
-		&account.Proxy.Login,
-		&account.Proxy.Password,
-		&account.Proxy.IPv6,
-		&account.Proxy.AccountsCount,
-		&active,
+		&proxyID,
+		&proxyIP,
+		&proxyPort,
+		&proxyLogin,
+		&proxyPassword,
+		&proxyIPv6,
+		&proxyCount,
+		&proxyActive,
 	)
 	if err != nil {
 		return nil, err
 	}
-	account.Proxy.IsActive = active
+
+	if proxyID.Valid {
+		account.Proxy = &models.Proxy{ID: int(proxyID.Int64), IsActive: proxyActive}
+		if proxyIP.Valid {
+			account.Proxy.IP = proxyIP.String
+		}
+		if proxyPort.Valid {
+			account.Proxy.Port = int(proxyPort.Int64)
+		}
+		if proxyLogin.Valid {
+			account.Proxy.Login = proxyLogin.String
+		}
+		if proxyPassword.Valid {
+			account.Proxy.Password = proxyPassword.String
+		}
+		if proxyIPv6.Valid {
+			account.Proxy.IPv6 = proxyIPv6.String
+		}
+		if proxyCount.Valid {
+			account.Proxy.AccountsCount = int(proxyCount.Int64)
+		}
+	} else {
+		account.Proxy = nil
+		account.ProxyID = nil
+	}
+
 	return &account, nil
 }
 
