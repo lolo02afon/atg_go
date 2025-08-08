@@ -3,6 +3,7 @@ package telegram
 import (
 	module "atg_go/pkg/telegram/module"
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"math/rand"
@@ -79,19 +80,17 @@ func CompleteAuthorization(apiID int, apiHash, phone, code, phoneCodeHash string
 	}
 	ctx := context.Background()
 	return client.Run(ctx, func(ctx context.Context) error {
-		helper := AuthHelper{
-			phone:         phone,
-			code:          code,
-			phoneCodeHash: phoneCodeHash,
-		}
-
-		flow := auth.NewFlow(
-			helper,
-			auth.SendCodeOptions{},
-		)
-
-		log.Printf("[DEBUG] Attempting authorization with code: %s", code)
-		if err := client.Auth().IfNecessary(ctx, flow); err != nil {
+		log.Printf("[DEBUG] Attempting sign in with code: %s", code)
+		if _, err := client.Auth().SignIn(ctx, phone, code, phoneCodeHash); err != nil {
+			if errors.Is(err, auth.ErrPasswordAuthNeeded) {
+				log.Printf("[DEBUG] 2FA required, providing default password")
+				if _, err := client.Auth().Password(ctx, twoFAPassword); err != nil {
+					log.Printf("[ERROR] Password authentication failed: %v", err)
+					return fmt.Errorf("password authentication failed: %w", err)
+				}
+				log.Printf("[INFO] Successfully authorized phone: %s", phone)
+				return nil
+			}
 			log.Printf("[ERROR] Authorization failed: %v", err)
 			return fmt.Errorf("authorization error: %w", err)
 		}
