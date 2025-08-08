@@ -6,6 +6,11 @@ import (
 	"time"
 )
 
+// Таблица activity хранит действия аккаунтов.
+// Поле id_message содержит ID связанного сообщения:
+// для реакций это идентификатор сообщения из чата обсуждения,
+// для комментариев — ID поста канала.
+
 // ActivityTypeReaction — значение поля activity_type для реакций.
 const ActivityTypeReaction = "reaction"
 
@@ -13,6 +18,8 @@ const ActivityTypeReaction = "reaction"
 const ActivityTypeComment = "comment"
 
 // SaveActivity сохраняет действие аккаунта в таблице activity вместе со временем.
+// messageID — идентификатор сообщения: для ActivityTypeReaction это ID сообщения
+// из чата обсуждения, для ActivityTypeComment — ID поста канала.
 func (db *DB) SaveActivity(accountID, channelID, messageID int, activityType string) error {
 	chID := strconv.FormatInt(int64(channelID), 10) // сохраняем ID как строку
 	msgID := strconv.FormatInt(int64(messageID), 10)
@@ -24,19 +31,22 @@ func (db *DB) SaveActivity(accountID, channelID, messageID int, activityType str
 }
 
 // SaveReaction сохраняет информацию о реакции в таблице activity.
+// messageID должен быть идентификатором сообщения из обсуждения, которому
+// поставлена реакция, а не ID поста канала.
 func (db *DB) SaveReaction(accountID, channelID, messageID int) error {
 	return db.SaveActivity(accountID, channelID, messageID, ActivityTypeReaction)
 }
 
 // SaveComment сохраняет информацию о комментарии в таблице activity.
-// messageID — идентификатор поста, к которому оставлен комментарий.
+// messageID должен быть ID поста канала, к которому оставлен комментарий,
+// а не идентификатор сообщения из обсуждения.
 func (db *DB) SaveComment(accountID, channelID, messageID int) error {
 	return db.SaveActivity(accountID, channelID, messageID, ActivityTypeComment)
 }
 
-// HasComment проверяет, существует ли комментарий с указанным идентификатором
-// для заданной учетной записи. Возвращает true, если запись с activity_type = 'comment'
-// уже есть в таблице.
+// HasComment проверяет, существует ли комментарий для поста с указанным ID у
+// заданной учетной записи. messageID должен содержать ID поста канала. Возвращает
+// true, если запись с activity_type = 'comment' уже есть в таблице.
 func (db *DB) HasComment(accountID, messageID int) (bool, error) {
 	var exists bool
 	msgID := strconv.FormatInt(int64(messageID), 10) // сравниваем по строковому ID
@@ -47,8 +57,9 @@ func (db *DB) HasComment(accountID, messageID int) (bool, error) {
 	return exists, err
 }
 
-// HasCommentForPost проверяет, существует ли комментарий с указанным идентификатором
-// для заданного канала. Возвращает true при наличии записи с типом 'comment'.
+// HasCommentForPost проверяет, существует ли комментарий для поста с указанным
+// ID в заданном канале. messageID должен быть ID поста канала. Возвращает true
+// при наличии записи с типом 'comment'.
 func (db *DB) HasCommentForPost(channelID, messageID int) (bool, error) {
 	var exists bool
 	chID := strconv.FormatInt(int64(channelID), 10)
@@ -60,9 +71,9 @@ func (db *DB) HasCommentForPost(channelID, messageID int) (bool, error) {
 	return exists, err
 }
 
-// GetLastReactionMessageID возвращает ID сообщения, на которое аккаунт
-// поставил реакцию последним в рамках указанного канала.
-// Если реакций ещё не было, возвращает 0.
+// GetLastReactionMessageID возвращает ID сообщения из обсуждения, на которое
+// аккаунт поставил реакцию последним в рамках указанного канала. Если реакций
+// ещё не было, возвращает 0.
 func (db *DB) GetLastReactionMessageID(accountID, channelID int) (int, error) {
 	var messageIDStr string
 	chID := strconv.FormatInt(int64(channelID), 10)
@@ -85,8 +96,8 @@ func (db *DB) GetLastReactionMessageID(accountID, channelID int) (int, error) {
 	return messageID, nil
 }
 
-// GetLastCommentMessageID возвращает числовой ID последнего сообщения,
-// к которому аккаунт оставил комментарий в указанном канале.
+// GetLastCommentMessageID возвращает ID поста канала, к которому аккаунт
+// оставил комментарий последним в указанном канале.
 // Если комментариев ещё не было, возвращается 0 и nil.
 // В случае ошибки запроса или если значение id_message невозможно
 // преобразовать в целое число, функция возвращает 0 и ошибку.
@@ -113,8 +124,9 @@ func (db *DB) GetLastCommentMessageID(accountID, channelID int) (int, error) {
 }
 
 // CanReactOnMessage проверяет, можно ли аккаунту поставить реакцию на
-// сообщение с указанным ID в заданном канале. Разница между ID должна быть
-// не менее 10. Если аккаунт ещё не ставил реакций в канале, возвращает true.
+// сообщение обсуждения с указанным ID в заданном канале. Разница между ID
+// должна быть не менее 10. Если аккаунт ещё не ставил реакций в канале,
+// возвращает true.
 func (db *DB) CanReactOnMessage(accountID, channelID, messageID int) (bool, error) {
 	lastID, err := db.GetLastReactionMessageID(accountID, channelID)
 	if err != nil {

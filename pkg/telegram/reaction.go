@@ -15,10 +15,11 @@ import (
 )
 
 // SendReaction добавляет реакцию к последнему сообщению обсуждения канала.
-// После успешной отправки сохраняет запись об активности в таблице activity.
-// Возвращает ID сообщения, к которому была поставлена реакция (int),
-// ID исходного канала (int) и ошибку.
-// При неудаче оба идентификатора равны 0.
+// В качестве идентификатора используется ID сообщения из чата обсуждения,
+// который отличается от ID поста в канале. После успешной отправки
+// сохраняет запись об активности в таблице activity. Возвращает ID сообщения,
+// к которому была поставлена реакция (int), ID исходного канала (int) и
+// ошибку. При неудаче оба идентификатора равны 0.
 func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID int, apiHash string, msgCount int, proxy *models.Proxy) (int, int, error) {
 	log.Printf("[START] Отправка реакции в канал %s от имени %s", channelURL, phone)
 
@@ -137,9 +138,9 @@ func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID
 		}
 
 		log.Printf("Реакция %s успешно отправлена", reaction)
-		// Сохраняем ID сообщения
+		// Сохраняем ID сообщения обсуждения (не ID поста канала)
 		reactedMsgID = targetMsg.ID
-		// Записываем активность в таблицу activity
+		// Записываем активность в таблицу activity, используя ID сообщения обсуждения
 		if err := module.SaveReactionActivity(db, accountID, channelID, reactedMsgID); err != nil {
 			return fmt.Errorf("не удалось сохранить активность: %w", err)
 		}
