@@ -1,14 +1,15 @@
 package main
 
 import (
-        "atg_go/internal/auth"
-        "atg_go/internal/comments"
-        reaction "atg_go/internal/reaction"
-        module "atg_go/internal/module"
-        "atg_go/pkg/storage"
-        "database/sql"
-        "log"
-        "os"
+	"atg_go/internal/auth"
+	"atg_go/internal/comments"
+	"atg_go/internal/middleware"
+	module "atg_go/internal/module"
+	reaction "atg_go/internal/reaction"
+	"atg_go/pkg/storage"
+	"database/sql"
+	"log"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
@@ -53,6 +54,7 @@ func getPort() string {
 // Настройка маршрутов
 func setupRouter(db *storage.DB, commentDB *storage.CommentDB) *gin.Engine {
 	r := gin.Default()
+	r.Use(middleware.AuthRequired())
 
 	// Группа роутов для авторизации
 	authGroup := r.Group("/auth")
@@ -62,9 +64,9 @@ func setupRouter(db *storage.DB, commentDB *storage.CommentDB) *gin.Engine {
 	commentGroup := r.Group("/comment")
 	comments.SetupRoutes(commentGroup, db, commentDB) // Передаем оба хранилища
 
-        // Группа роутов для реакций на чужие комментарии
-        reactionGroup := r.Group("/reaction")
-        reaction.SetupRoutes(reactionGroup, db, commentDB)
+	// Группа роутов для реакций на чужие комментарии
+	reactionGroup := r.Group("/reaction")
+	reaction.SetupRoutes(reactionGroup, db, commentDB)
 
 	// Группа роутов для telegram-модуля
 	moduleGroup := r.Group("/module")
@@ -78,10 +80,10 @@ func setupRouter(db *storage.DB, commentDB *storage.CommentDB) *gin.Engine {
 	// Логирование зарегистрированных роутов
 	log.Printf("[ROUTER] Routes initialized:")
 	log.Printf("[ROUTER] POST /auth/CreateAccount")
-        log.Printf("[ROUTER] POST /comment/send")
-        log.Printf("[ROUTER] POST /reaction/send")
-        log.Printf("[ROUTER] POST /module/dispatcher_activity")
-        log.Printf("[ROUTER] GET /health")
+	log.Printf("[ROUTER] POST /comment/send")
+	log.Printf("[ROUTER] POST /reaction/send")
+	log.Printf("[ROUTER] POST /module/dispatcher_activity")
+	log.Printf("[ROUTER] GET /health")
 
 	return r
 }
