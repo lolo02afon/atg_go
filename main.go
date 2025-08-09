@@ -17,7 +17,12 @@ import (
 
 func main() {
 	// Инициализация подключения к БД
-	dbConn, err := sql.Open("postgres", "postgres://postgres:postgres@localhost:5432/atg_db?sslmode=disable")
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		// запасной вариант для локального запуска разработчиком
+		dsn = "postgres://postgres:postgres@localhost:5432/atg_db?sslmode=disable&application_name=atg_app"
+	}
+	dbConn, err := sql.Open("postgres", dsn)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
