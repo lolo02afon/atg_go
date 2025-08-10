@@ -27,7 +27,9 @@ func NewHandler(db *storage.DB, commentDB *storage.CommentDB) *CommentHandler {
 
 func (h *CommentHandler) SendComment(c *gin.Context) {
 	var request struct {
-		PostsCount int `json:"posts_count" binding:"required"`
+		PostsCount   int   `json:"posts_count" binding:"required"`
+		MsgMax       []int `json:"msg_max" binding:"required"`
+		TimeRangeMSK []int `json:"time_range_msk" binding:"required"`
 	}
 
 	log.Printf("[HANDLER] Starting mass comment request")
@@ -35,6 +37,10 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 	if err := c.ShouldBindJSON(&request); err != nil {
 		log.Printf("[HANDLER ERROR] Invalid request: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		return
+	}
+	if len(request.MsgMax) != 2 || len(request.TimeRangeMSK) != 2 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "msg_max and time_range_msk must have exactly 2 elements"})
 		return
 	}
 
@@ -67,6 +73,7 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		}
 		userIDs = append(userIDs, id)
 	}
+	msk, _ := time.LoadLocation("Europe/Moscow")
 
 	for i, account := range accounts {
 		// Задержка между аккаунтами (чтобы не слишком быстро подряд)
@@ -90,6 +97,34 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 				// log.Printf("[HANDLER] %ds remaining...", remaining)
 				time.Sleep(5 * time.Second)
 			}
+		}
+
+		now := time.Now().In(msk)
+		hour := now.Hour()
+		start, end := request.TimeRangeMSK[0], request.TimeRangeMSK[1]
+
+		var outOfRange bool
+		if start < end {
+			outOfRange = hour < start || hour >= end
+		} else {
+			outOfRange = hour < start && hour >= end
+		}
+
+		if outOfRange {
+			log.Printf("[HANDLER INFO] Время %s вне диапазона %d-%d МСК, пропуск для %s", now.Format(time.RFC3339), start, end, account.Phone)
+			continue
+		}
+
+		limit := dailyCommentLimit(account.ID, now, request.MsgMax[0], request.MsgMax[1])
+		count, err := h.DB.CountCommentsForDate(account.ID, now)
+		if err != nil {
+			log.Printf("[HANDLER ERROR] Не удалось получить количество комментариев для %s: %v", account.Phone, err)
+			errorCount++
+			continue
+		}
+		if count >= limit {
+			log.Printf("[HANDLER INFO] Достигнут дневной лимит комментариев (%d/%d) для %s", count, limit, account.Phone)
+			continue
 		}
 
 		// --- НОВАЯ ЛОГИКА: выбор канала для каждого аккаунта ---
@@ -149,4 +184,14 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 	}
 	log.Printf("[HANDLER INFO] Final result: %+v", result)
 	c.JSON(http.StatusOK, result)
+}
+
+func dailyCommentLimit(accountID int, date time.Time, min, max int) int {
+	if max < min {
+		max = min
+	}
+	day := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
+	seed := int64(accountID) + day.Unix()
+	r := rand.New(rand.NewSource(seed))
+	return min + r.Intn(max-min+1)
 }
