@@ -41,7 +41,7 @@ func (h *AccountHandler) CreateAccount(c *gin.Context) {
 			return
 		}
 		proxy = p
-		log.Printf("[DEBUG] Используем прокси %s:%s", p.IP, p.Port)
+		log.Printf("[DEBUG] Используем прокси %s:%d", p.IP, p.Port)
 	}
 
 	log.Printf("[DEBUG] Отправляем запрос к Telegram для номера %s", account.Phone)
