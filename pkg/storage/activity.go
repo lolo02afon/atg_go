@@ -44,6 +44,19 @@ func (db *DB) SaveComment(accountID, channelID, messageID int) error {
 	return db.SaveActivity(accountID, channelID, messageID, ActivityTypeComment)
 }
 
+// CountCommentsForDate возвращает количество комментариев, оставленных аккаунтом в указанную дату.
+// date интерпретируется в своей временной зоне.
+func (db *DB) CountCommentsForDate(accountID int, date time.Time) (int, error) {
+	start := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
+	end := start.Add(24 * time.Hour)
+	var count int
+	err := db.Conn.QueryRow(
+		`SELECT COUNT(*) FROM activity WHERE id_account = $1 AND activity_type = $2 AND date_time >= $3 AND date_time < $4`,
+		accountID, ActivityTypeComment, start, end,
+	).Scan(&count)
+	return count, err
+}
+
 // HasComment проверяет, существует ли комментарий для поста с указанным ID у
 // заданной учетной записи. messageID должен содержать ID поста канала. Возвращает
 // true, если запись с activity_type = 'comment' уже есть в таблице.
