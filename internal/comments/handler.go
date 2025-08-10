@@ -100,8 +100,18 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		}
 
 		now := time.Now().In(msk)
-		if now.Hour() < request.TimeRangeMSK[0] || now.Hour() >= request.TimeRangeMSK[1] {
-			log.Printf("[HANDLER INFO] Время %s вне диапазона %d-%d МСК, пропуск для %s", now.Format(time.RFC3339), request.TimeRangeMSK[0], request.TimeRangeMSK[1], account.Phone)
+		hour := now.Hour()
+		start, end := request.TimeRangeMSK[0], request.TimeRangeMSK[1]
+
+		var outOfRange bool
+		if start < end {
+			outOfRange = hour < start || hour >= end
+		} else {
+			outOfRange = hour < start && hour >= end
+		}
+
+		if outOfRange {
+			log.Printf("[HANDLER INFO] Время %s вне диапазона %d-%d МСК, пропуск для %s", now.Format(time.RFC3339), start, end, account.Phone)
 			continue
 		}
 
