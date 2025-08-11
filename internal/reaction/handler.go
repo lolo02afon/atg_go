@@ -65,6 +65,8 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 
 	rand.Seed(time.Now().UnixNano())
 
+	msk := time.FixedZone("MSK", 3*3600)
+
 	for i, account := range accounts {
 		// Задержка между аккаунтами
 		if i > 0 {
@@ -85,6 +87,34 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 				}
 				time.Sleep(5 * time.Second)
 			}
+		}
+
+		now := time.Now().In(msk)
+		hour := now.Hour()
+		start, end := request.DispatcherPeriod[0], request.DispatcherPeriod[1]
+
+		var outOfRange bool
+		if start < end {
+			outOfRange = hour < start || hour >= end
+		} else {
+			outOfRange = hour < start && hour >= end
+		}
+
+		if outOfRange {
+			log.Printf("[HANDLER INFO] Время %s вне диапазона %d-%d МСК, пропуск для %s", now.Format(time.RFC3339), start, end, account.Phone)
+			continue
+		}
+
+		limit := dailyReactionLimit(account.ID, now, request.DispatcherActivityMax[0], request.DispatcherActivityMax[1])
+		count, err := h.DB.CountReactionsForDate(account.ID, now)
+		if err != nil {
+			log.Printf("[HANDLER ERROR] Не удалось получить количество реакций для %s: %v", account.Phone, err)
+			errorCount++
+			continue
+		}
+		if count >= limit {
+			log.Printf("[HANDLER INFO] Достигнут дневной лимит реакций (%d/%d) для %s", count, limit, account.Phone)
+			continue
 		}
 
 		// Выбор случайного канала
@@ -134,4 +164,15 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 	}
 	log.Printf("[HANDLER INFO] Итог: %+v", result)
 	c.JSON(http.StatusOK, result)
+}
+
+// dailyReactionLimit вычисляет дневной лимит реакций для аккаунта в заданном диапазоне.
+func dailyReactionLimit(accountID int, date time.Time, min, max int) int {
+	if max < min {
+		max = min
+	}
+	day := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
+	seed := int64(accountID) + day.Unix()
+	r := rand.New(rand.NewSource(seed))
+	return min + r.Intn(max-min+1)
 }
