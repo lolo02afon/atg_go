@@ -61,7 +61,7 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 	// Собираем ID наших аккаунтов в Telegram
 	var userIDs []int
 	for _, acc := range accounts {
-		id, err := telegram.GetUserID(acc.Phone, acc.ApiID, acc.ApiHash, acc.Proxy)
+		id, err := telegram.GetUserID(h.DB, acc.ID, acc.Phone, acc.ApiID, acc.ApiHash, acc.Proxy)
 		if err != nil {
 			log.Printf("[HANDLER WARN] Не удалось получить ID для %s: %v", acc.Phone, err)
 			continue

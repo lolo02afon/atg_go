@@ -2,6 +2,7 @@ package module
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"math/rand"
@@ -12,6 +13,7 @@ import (
 
 	"golang.org/x/net/proxy"
 
+	"github.com/gotd/td/session"
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/dcs"
 	"github.com/gotd/td/tg"
@@ -121,13 +123,14 @@ func Modf_GetRandomChannelPost(ctx context.Context, api *tg.Client, channel *tg.
 	return validMessages[rand.Intn(len(validMessages))], nil
 }
 
-// Создаем клиент Telegram с указанными параметрами
-func Modf_AccountInitialization(apiID int, apiHash, phone string, p *models.Proxy, r *rand.Rand) (*telegram.Client, error) {
-	opts := telegram.Options{
-		SessionStorage: &telegram.FileSessionStorage{
-			Path: "sessions/" + phone + ".session.json",
-		},
+// Создаем клиент Telegram с указанными параметрами и хранилищем сессии в БД.
+func Modf_AccountInitialization(apiID int, apiHash, phone string, p *models.Proxy, r *rand.Rand, db *sql.DB, accountID int) (*telegram.Client, error) {
+	var storage session.Storage = &session.StorageMemory{}
+	if db != nil && accountID > 0 {
+		storage = &DBSessionStorage{DB: db, AccountID: accountID}
 	}
+
+	opts := telegram.Options{SessionStorage: storage}
 	if r != nil {
 		opts.Random = r
 	}
