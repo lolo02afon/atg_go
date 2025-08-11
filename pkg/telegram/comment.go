@@ -95,7 +95,6 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 		// Если последний сохранённый ID больше, чем у самого нового поста в канале,
 		// вероятно, в базе сохранён ID из чата обсуждения. Сбрасываем lastID.
 		if lastID > 0 && len(posts) > 0 && lastID > posts[0].ID {
-			log.Printf("[DEBUG] Последний ID %d больше максимального ID %d, сброс", lastID, posts[0].ID)
 			lastID = 0
 		}
 
@@ -119,7 +118,6 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 
 			discussionData, err := module.Modf_getPostDiscussion(ctx, api, channel, p.ID)
 			if err != nil {
-				log.Printf("[DEBUG] пост %d: не удалось получить обсуждение (%v) — пропуск", p.ID, err)
 				continue
 			}
 
@@ -144,7 +142,6 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 
 			hasOwn, err := hasRecentCommentByUsers(ctx, api, discussionData.Chat, replyToMsgID, idSet)
 			if err != nil {
-				log.Printf("[DEBUG] пост %d: не удалось проверить последние комментарии (%v) — пропуск", p.ID, err)
 				continue
 			}
 			if hasOwn {

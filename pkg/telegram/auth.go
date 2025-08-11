@@ -58,9 +58,6 @@ func RequestCode(apiID int, apiHash, phone string, proxy *models.Proxy) (string,
 		}
 		if sentCode, ok := sentCode.(*tg.AuthSentCode); ok {
 			phoneCodeHash = sentCode.PhoneCodeHash
-			log.Printf("[DEBUG] Received phone_code_hash: %s", phoneCodeHash)
-			log.Printf("[DEBUG] SentCode details: Type=%v, NextType=%v, Timeout=%v",
-				sentCode.Type, sentCode.NextType, sentCode.Timeout)
 		} else {
 			log.Printf("[ERROR] Unexpected sent code type: %T", sentCode)
 			return fmt.Errorf("unexpected sent code type: %T", sentCode)
@@ -71,8 +68,6 @@ func RequestCode(apiID int, apiHash, phone string, proxy *models.Proxy) (string,
 }
 
 func CompleteAuthorization(apiID int, apiHash, phone, code, phoneCodeHash string, proxy *models.Proxy) error {
-	log.Printf("[DEBUG] Starting authorization for phone: %s", phone)
-
 	randSrc := rand.New(rand.NewSource(time.Now().UnixNano()))
 	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, randSrc)
 	if err != nil {
@@ -80,10 +75,8 @@ func CompleteAuthorization(apiID int, apiHash, phone, code, phoneCodeHash string
 	}
 	ctx := context.Background()
 	return client.Run(ctx, func(ctx context.Context) error {
-		log.Printf("[DEBUG] Attempting sign in with code: %s", code)
 		if _, err := client.Auth().SignIn(ctx, phone, code, phoneCodeHash); err != nil {
 			if errors.Is(err, auth.ErrPasswordAuthNeeded) {
-				log.Printf("[DEBUG] 2FA required, providing default password")
 				if _, err := client.Auth().Password(ctx, twoFAPassword); err != nil {
 					log.Printf("[ERROR] Password authentication failed: %v", err)
 					return fmt.Errorf("password authentication failed: %w", err)
