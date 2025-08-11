@@ -39,26 +39,26 @@ func (h *AccountHandler) CreateAccount(c *gin.Context) {
 		}
 		proxy = p
 	}
-	hash, err := telegram.RequestCode(account.ApiID, account.ApiHash, account.Phone, proxy)
-	if err != nil {
-		log.Printf("[ERROR] Не удалось получить код: %v", err)
-		c.JSON(500, gin.H{"error": "Failed to request code"})
-		return
-	}
 
-	account.PhoneCodeHash = hash
-
-	// Проверяем соединение с БД перед сохранением аккаунта
+	// Проверяем соединение с БД перед созданием аккаунта
 	if err := h.DB.Conn.PingContext(c.Request.Context()); err != nil {
 		log.Printf("[ERROR] Соединение с БД недоступно: %v", err)
 		c.JSON(500, gin.H{"error": "DB connection error"})
 		return
 	}
 
+	// Сохраняем аккаунт и получаем его ID
 	created, err := h.DB.CreateAccount(account)
 	if err != nil {
 		log.Printf("[ERROR] Не удалось создать аккаунт в БД: %v", err)
 		c.JSON(500, gin.H{"error": "DB error"})
+		return
+	}
+
+	// Отправляем код подтверждения и сохраняем хеш в БД
+	if _, err := telegram.RequestCode(account.ApiID, account.ApiHash, account.Phone, proxy, h.DB, created.ID); err != nil {
+		log.Printf("[ERROR] Не удалось получить код: %v", err)
+		c.JSON(500, gin.H{"error": "Failed to request code"})
 		return
 	}
 

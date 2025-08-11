@@ -158,6 +158,16 @@ func (db *DB) MarkAccountAsAuthorized(accountID int) error {
 	return err
 }
 
+// Обновляет phone_code_hash для указанного аккаунта
+func (db *DB) UpdatePhoneCodeHash(accountID int, hash string) error {
+	_, err := db.Conn.Exec(
+		"UPDATE accounts SET phone_code_hash = $1 WHERE id = $2",
+		hash,
+		accountID,
+	)
+	return err
+}
+
 func (db *DB) GetAccountByPhone(phone string) (*models.Account, error) {
 	var account models.Account
 
