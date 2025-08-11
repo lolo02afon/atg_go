@@ -39,13 +39,32 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
 		return
 	}
-	if len(request.DispatcherActivityMax) != 2 || len(request.DispatcherPeriod) != 2 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "dispatcher_activity_max and dispatcher_period must have exactly 2 elements"})
-		return
-	}
+        if len(request.DispatcherActivityMax) != 2 || len(request.DispatcherPeriod) != 2 {
+                c.JSON(http.StatusBadRequest, gin.H{"error": "dispatcher_activity_max and dispatcher_period must have exactly 2 elements"})
+                return
+        }
 
-	// Получаем все авторизованные аккаунты
-	accounts, err := h.DB.GetAuthorizedAccounts()
+       // Evaluate dispatcher period and activity ranges without affecting current logic.
+       msk := time.FixedZone("MSK", 3*3600)
+       start, end := request.DispatcherPeriod[0], request.DispatcherPeriod[1]
+       hour := time.Now().In(msk).Hour()
+       var outOfRange bool
+       if start < end {
+               outOfRange = hour < start || hour >= end
+       } else {
+               outOfRange = hour < start && hour >= end
+       }
+       if outOfRange {
+               log.Printf("[HANDLER DEBUG] Current hour %d is outside dispatcher period %d-%d", hour, start, end)
+       }
+
+       // Extract dispatcher activity bounds for future use.
+       from, to := request.DispatcherActivityMax[0], request.DispatcherActivityMax[1]
+       _ = from
+       _ = to
+
+        // Получаем все авторизованные аккаунты
+        accounts, err := h.DB.GetAuthorizedAccounts()
 	if err != nil {
 		log.Printf("[HANDLER ERROR] Account lookup failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get accounts"})
@@ -73,7 +92,6 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		}
 		userIDs = append(userIDs, id)
 	}
-
 	for i, account := range accounts {
 		// Задержка между аккаунтами (чтобы не слишком быстро подряд)
 		if i > 0 {
