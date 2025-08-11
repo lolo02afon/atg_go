@@ -274,8 +274,20 @@ func (db *DB) GetAuthorizedAccounts() ([]models.Account, error) {
 	// Итерируем по результатам
 	for rows.Next() {
 		var account models.Account
-		var active sql.NullBool
-		account.Proxy = &models.Proxy{}
+
+		// Переменные для возможных NULL-значений прокси
+		var (
+			proxyID        sql.NullInt64
+			proxyIP        sql.NullString
+			proxyPort      sql.NullInt64
+			proxyLogin     sql.NullString
+			proxyPassword  sql.NullString
+			proxyIPv6      sql.NullString
+			proxyCount     sql.NullInt64
+			proxyIsActive  sql.NullBool
+			accountProxyID sql.NullInt64
+		)
+
 		if err := rows.Scan(
 			&account.ID,
 			&account.Phone,
@@ -283,20 +295,40 @@ func (db *DB) GetAuthorizedAccounts() ([]models.Account, error) {
 			&account.ApiHash,
 			&account.PhoneCodeHash,
 			&account.IsAuthorized,
-			&account.ProxyID,
-			&account.Proxy.ID,
-			&account.Proxy.IP,
-			&account.Proxy.Port,
-			&account.Proxy.Login,
-			&account.Proxy.Password,
-			&account.Proxy.IPv6,
-			&account.Proxy.AccountsCount,
-			&active,
+			&accountProxyID,
+			&proxyID,
+			&proxyIP,
+			&proxyPort,
+			&proxyLogin,
+			&proxyPassword,
+			&proxyIPv6,
+			&proxyCount,
+			&proxyIsActive,
 		); err != nil {
 			log.Printf("[DB WARN] Failed to scan account: %v", err)
 			continue // Пропускаем проблемные записи
 		}
-		account.Proxy.IsActive = active
+
+		// Заполняем ID прокси в аккаунте, если он есть
+		if accountProxyID.Valid {
+			id := int(accountProxyID.Int64)
+			account.ProxyID = &id
+		}
+
+		// Если данные по прокси получены, формируем объект прокси
+		if proxyID.Valid {
+			account.Proxy = &models.Proxy{
+				ID:            int(proxyID.Int64),
+				IP:            proxyIP.String,
+				Port:          int(proxyPort.Int64),
+				Login:         proxyLogin.String,
+				Password:      proxyPassword.String,
+				IPv6:          proxyIPv6.String,
+				AccountsCount: int(proxyCount.Int64),
+				IsActive:      proxyIsActive,
+			}
+		}
+
 		accounts = append(accounts, account)
 	}
 
