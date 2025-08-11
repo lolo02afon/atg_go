@@ -27,9 +27,9 @@ func NewHandler(db *storage.DB, commentDB *storage.CommentDB) *CommentHandler {
 
 func (h *CommentHandler) SendComment(c *gin.Context) {
 	var request struct {
-		PostsCount            int   `json:"posts_count" binding:"required"`
-		DispatcherActivityMax []int `json:"dispatcher_activity_max" binding:"required"`
-		DispatcherPeriod      []int `json:"dispatcher_period" binding:"required"`
+		PostsCount   int   `json:"posts_count" binding:"required"`
+		MsgMax       []int `json:"dispatcher_activity_max" binding:"required"`
+		TimeRangeMSK []int `json:"dispatcher_period" binding:"required"`
 	}
 
 	log.Printf("[HANDLER] Starting mass comment request")
@@ -39,32 +39,33 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
 		return
 	}
-        if len(request.DispatcherActivityMax) != 2 || len(request.DispatcherPeriod) != 2 {
-                c.JSON(http.StatusBadRequest, gin.H{"error": "dispatcher_activity_max and dispatcher_period must have exactly 2 elements"})
-                return
-        }
+	if len(request.MsgMax) != 2 || len(request.TimeRangeMSK) != 2 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "dispatcher_activity_max and dispatcher_period must have exactly 2 elements"})
+		return
+	}
 
-       // Evaluate dispatcher period and activity ranges without affecting current logic.
-       msk := time.FixedZone("MSK", 3*3600)
-       start, end := request.DispatcherPeriod[0], request.DispatcherPeriod[1]
-       hour := time.Now().In(msk).Hour()
-       var outOfRange bool
-       if start < end {
-               outOfRange = hour < start || hour >= end
-       } else {
-               outOfRange = hour < start && hour >= end
-       }
-       if outOfRange {
-               log.Printf("[HANDLER DEBUG] Current hour %d is outside dispatcher period %d-%d", hour, start, end)
-       }
+	// Evaluate dispatcher period and activity ranges without affecting current logic.
+	msk := time.FixedZone("MSK", 3*3600)
+	start, end := request.TimeRangeMSK[0], request.TimeRangeMSK[1]
+	hour := time.Now().In(msk).Hour()
+	var outOfRange bool
+	if start < end {
+		outOfRange = hour < start || hour >= end
+	} else {
+		outOfRange = hour < start && hour >= end
+	}
+	if outOfRange {
+		log.Printf("[HANDLER DEBUG] Current hour %d is outside dispatcher period %d-%d", hour, start, end)
+	}
 
-       // Extract dispatcher activity bounds for future use.
-       from, to := request.DispatcherActivityMax[0], request.DispatcherActivityMax[1]
-       _ = from
-       _ = to
+	// Extract dispatcher activity bounds for future use.
+	from, to := request.MsgMax[0], request.MsgMax[1]
+	_ = from
+	_ = to
 
-        // Получаем все авторизованные аккаунты
-        accounts, err := h.DB.GetAuthorizedAccounts()
+	// Получаем все авторизованные аккаунты
+	accounts, err := h.DB.GetAuthorizedAccounts()
+
 	if err != nil {
 		log.Printf("[HANDLER ERROR] Account lookup failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get accounts"})
