@@ -45,8 +45,9 @@ func (a AuthHelper) AcceptTermsOfService(ctx context.Context, tos tg.HelpTermsOf
 	return nil
 }
 
-func RequestCode(apiID int, apiHash, phone string, proxy *models.Proxy) (string, error) {
-	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, nil, nil, 0)
+// RequestCode отправляет код подтверждения и сохраняет хеш в БД
+func RequestCode(apiID int, apiHash, phone string, proxy *models.Proxy, db *storage.DB, accountID int) (string, error) {
+	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, nil, db.Conn, accountID)
 	if err != nil {
 		return "", err
 	}
@@ -57,8 +58,12 @@ func RequestCode(apiID int, apiHash, phone string, proxy *models.Proxy) (string,
 		if err != nil {
 			return err
 		}
-		if sentCode, ok := sentCode.(*tg.AuthSentCode); ok {
-			phoneCodeHash = sentCode.PhoneCodeHash
+		if sent, ok := sentCode.(*tg.AuthSentCode); ok {
+			phoneCodeHash = sent.PhoneCodeHash
+			// Сохраняем полученный хеш в БД для дальнейшей авторизации
+			if err := db.UpdatePhoneCodeHash(accountID, phoneCodeHash); err != nil {
+				return err
+			}
 		} else {
 			log.Printf("[ERROR] Unexpected sent code type: %T", sentCode)
 			return fmt.Errorf("unexpected sent code type: %T", sentCode)
