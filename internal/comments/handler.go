@@ -27,50 +27,16 @@ func NewHandler(db *storage.DB, commentDB *storage.CommentDB) *CommentHandler {
 
 func (h *CommentHandler) SendComment(c *gin.Context) {
 	var request struct {
-		PostsCount            int      `json:"posts_count" binding:"required"`
-		DispatcherActivityMax []int    `json:"dispatcher_activity_max" binding:"required"`
-		DispatcherPeriod      []string `json:"dispatcher_period" binding:"required"`
+		PostsCount int `json:"posts_count" binding:"required"`
 	}
 
-	log.Printf("[HANDLER] Starting mass comment request")
+	log.Printf("[HANDLER] Запуск массовой отправки комментариев")
 
 	if err := c.ShouldBindJSON(&request); err != nil {
-		log.Printf("[HANDLER ERROR] Invalid request: %v", err)
+		log.Printf("[HANDLER ERROR] Неверный формат запроса: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
 		return
 	}
-	if len(request.DispatcherActivityMax) != 2 || len(request.DispatcherPeriod) != 2 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "dispatcher_activity_max and dispatcher_period must have exactly 2 elements"})
-		return
-	}
-
-	// Оценка временного диапазона и лимитов активности
-	msk := time.FixedZone("MSK", 3*3600)
-	startTime, err1 := time.Parse("15:04", request.DispatcherPeriod[0])
-	endTime, err2 := time.Parse("15:04", request.DispatcherPeriod[1])
-	if err1 != nil || err2 != nil {
-		log.Printf("[HANDLER ERROR] Неверный формат dispatcher_period: %v %v", err1, err2)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid dispatcher_period format"})
-		return
-	}
-	startMin := startTime.Hour()*60 + startTime.Minute()
-	endMin := endTime.Hour()*60 + endTime.Minute()
-	cur := time.Now().In(msk)
-	hourMin := cur.Hour()*60 + cur.Minute()
-	var outOfRange bool
-	if startMin < endMin {
-		outOfRange = hourMin < startMin || hourMin >= endMin
-	} else {
-		outOfRange = hourMin < startMin && hourMin >= endMin
-	}
-	if outOfRange {
-		log.Printf("[HANDLER DEBUG] Текущее время вне диапазона %s-%s", request.DispatcherPeriod[0], request.DispatcherPeriod[1])
-	}
-
-	// Извлекаем границы активностей
-	from, to := request.DispatcherActivityMax[0], request.DispatcherActivityMax[1]
-	_ = from
-	_ = to
 
 	// Получаем все авторизованные аккаунты
 	accounts, err := h.DB.GetAuthorizedAccounts()
@@ -121,39 +87,12 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 					return
 				default:
 				}
-				// log.Printf("[HANDLER] %ds remaining...", remaining)
+				// Ожидаем по 5 секунд, чтобы можно было прервать процесс
 				time.Sleep(5 * time.Second)
 			}
 		}
 
-		now := time.Now().In(msk)
-		current := now.Hour()*60 + now.Minute()
-
-		var outOfRange bool
-		if startMin < endMin {
-			outOfRange = current < startMin || current >= endMin
-		} else {
-			outOfRange = current < startMin && current >= endMin
-		}
-
-		if outOfRange {
-			log.Printf("[HANDLER INFO] Время %s вне диапазона %s-%s МСК, пропуск для %s", now.Format(time.RFC3339), request.DispatcherPeriod[0], request.DispatcherPeriod[1], account.Phone)
-			continue
-		}
-
-		limit := dailyCommentLimit(account.ID, now, request.DispatcherActivityMax[0], request.DispatcherActivityMax[1])
-		count, err := h.DB.CountCommentsForDate(account.ID, now)
-		if err != nil {
-			log.Printf("[HANDLER ERROR] Не удалось получить количество комментариев для %s: %v", account.Phone, err)
-			errorCount++
-			continue
-		}
-		if count >= limit {
-			log.Printf("[HANDLER INFO] Достигнут дневной лимит комментариев (%d/%d) для %s", count, limit, account.Phone)
-			continue
-		}
-
-		// --- НОВАЯ ЛОГИКА: выбор канала для каждого аккаунта ---
+		// --- Выбор канала для каждого аккаунта ---
 		channelURL, err := h.CommentDB.GetRandomChannel()
 		if errors.Is(err, sql.ErrNoRows) {
 			log.Printf("[HANDLER ERROR] No channels available: %v", err)
@@ -210,14 +149,4 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 	}
 	log.Printf("[HANDLER INFO] Final result: %+v", result)
 	c.JSON(http.StatusOK, result)
-}
-
-func dailyCommentLimit(accountID int, date time.Time, min, max int) int {
-	if max < min {
-		max = min
-	}
-	day := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
-	seed := int64(accountID) + day.Unix()
-	r := rand.New(rand.NewSource(seed))
-	return min + r.Intn(max-min+1)
 }

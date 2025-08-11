@@ -5,54 +5,64 @@ import (
 	"encoding/json"
 	"math/rand"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
 
-// ActivityRequest описывает один запрос активности с адресом и произвольным телом.
+// константный Bearer-токен для внутренних запросов
+const bearerToken = "ZXNzIiwiZXhwIjoxNzUyOTU3OTMyLCJpYXQiOjE3NTI5NTQzMzIsImp0aSI6ImM1ZjY0MjcwMjZjYjY1IiwidXNlcl9pZRcNAW-s02Ayz6A"
+
+// ActivityRequest описывает один запрос активности с адресом и телом
+// запроса.
 type ActivityRequest struct {
 	URL         string         `json:"url"`
 	RequestBody map[string]any `json:"request_body"`
 }
 
-// ModF_DispatcherActivity выполняет запросы активности, распределяя их по суткам и указанным временным окнам.
-// daysNumber задаёт, сколько суток подряд выполняется активность.
-func ModF_DispatcherActivity(daysNumber int, activities []ActivityRequest) {
-	rand.Seed(time.Now().UnixNano())
+// ActivitySettings задаёт параметры расписания для активности.
+type ActivitySettings struct {
+	DispatcherActivityMax []int    `json:"dispatcher_activity_max"`
+	DispatcherPeriod      []string `json:"dispatcher_period"`
+}
 
+// ModF_DispatcherActivity выполняет запросы активности в течение
+// заданного количества суток.
+func ModF_DispatcherActivity(daysNumber int, activities []ActivityRequest, commentCfg, reactionCfg ActivitySettings) {
+	rand.Seed(time.Now().UnixNano())
 	start := time.Now()
 
 	for day := 0; day < daysNumber; day++ {
 		var wg sync.WaitGroup
 
 		for _, act := range activities {
-			wg.Add(1)
+			var cfg ActivitySettings
+			switch {
+			case strings.Contains(act.URL, "comment"):
+				cfg = commentCfg
+			case strings.Contains(act.URL, "reaction"):
+				cfg = reactionCfg
+			default:
+				continue
+			}
 
-			go func(act ActivityRequest, offset int) {
+			if len(cfg.DispatcherActivityMax) != 2 || len(cfg.DispatcherPeriod) != 2 {
+				continue
+			}
+
+			wg.Add(1)
+			go func(act ActivityRequest, cfg ActivitySettings, offset int) {
 				defer wg.Done()
 
-				period, ok1 := act.RequestBody["dispatcher_period"].([]interface{})
-				maxRange, ok2 := act.RequestBody["dispatcher_activity_max"].([]interface{})
-				if !ok1 || !ok2 || len(period) != 2 || len(maxRange) != 2 {
-					return
-				}
-
-				startStr, okStart := period[0].(string)
-				endStr, okEnd := period[1].(string)
-				if !okStart || !okEnd {
-					return
-				}
-
-				startTime, err1 := time.Parse("15:04", startStr)
-				endTime, err2 := time.Parse("15:04", endStr)
+				startTime, err1 := time.Parse("15:04", cfg.DispatcherPeriod[0])
+				endTime, err2 := time.Parse("15:04", cfg.DispatcherPeriod[1])
 				if err1 != nil || err2 != nil {
 					return
 				}
 				startMin := startTime.Hour()*60 + startTime.Minute()
 				endMin := endTime.Hour()*60 + endTime.Minute()
-				minAct := int(maxRange[0].(float64))
-				maxAct := int(maxRange[1].(float64))
-
+				minAct := cfg.DispatcherActivityMax[0]
+				maxAct := cfg.DispatcherActivityMax[1]
 				if endMin <= startMin || maxAct < minAct {
 					return
 				}
@@ -70,9 +80,15 @@ func ModF_DispatcherActivity(daysNumber int, activities []ActivityRequest) {
 						time.Sleep(sleep)
 					}
 					payload, _ := json.Marshal(act.RequestBody)
-					http.Post(act.URL, "application/json", bytes.NewBuffer(payload))
+					req, err := http.NewRequest("POST", act.URL, bytes.NewBuffer(payload))
+					if err != nil {
+						continue
+					}
+					req.Header.Set("Content-Type", "application/json")
+					req.Header.Set("Authorization", "Bearer "+bearerToken)
+					http.DefaultClient.Do(req)
 				}
-			}(act, day)
+			}(act, cfg, day)
 		}
 
 		wg.Wait()
