@@ -18,8 +18,10 @@ func NewHandler() *Handler { return &Handler{} }
 // Ожидает JSON со списком activity_request, где у каждого запроса есть url и request_body.
 func (h *Handler) DispatcherActivity(c *gin.Context) {
 	var req struct {
-		DaysNumber      int                              `json:"days_number" binding:"required"`
-		ActivityRequest []telegrammodule.ActivityRequest `json:"activity_request" binding:"required"` // каждый элемент содержит url и произвольное request_body
+		DaysNumber       int                              `json:"days_number" binding:"required"`
+		ActivityRequest  []telegrammodule.ActivityRequest `json:"activity_request" binding:"required"`
+		ActivityComment  telegrammodule.ActivitySettings  `json:"activity_comment" binding:"required"`
+		ActivityReaction telegrammodule.ActivitySettings  `json:"activity_reaction" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -28,7 +30,7 @@ func (h *Handler) DispatcherActivity(c *gin.Context) {
 	}
 
 	// Запускаем выполнение активностей в течение заданного количества суток
-	telegrammodule.ModF_DispatcherActivity(req.DaysNumber, req.ActivityRequest)
+	telegrammodule.ModF_DispatcherActivity(req.DaysNumber, req.ActivityRequest, req.ActivityComment, req.ActivityReaction)
 
 	c.JSON(http.StatusOK, gin.H{"status": "completed"})
 }
