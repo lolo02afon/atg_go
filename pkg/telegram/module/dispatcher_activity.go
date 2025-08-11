@@ -37,21 +37,31 @@ func ModF_DispatcherActivity(daysNumber int, activities []ActivityRequest) {
 					return
 				}
 
-				// извлекаем часы начала и конца окна
-				startHour := int(period[0].(float64))
-				endHour := int(period[1].(float64))
+				startStr, okStart := period[0].(string)
+				endStr, okEnd := period[1].(string)
+				if !okStart || !okEnd {
+					return
+				}
+
+				startTime, err1 := time.Parse("15:04", startStr)
+				endTime, err2 := time.Parse("15:04", endStr)
+				if err1 != nil || err2 != nil {
+					return
+				}
+				startMin := startTime.Hour()*60 + startTime.Minute()
+				endMin := endTime.Hour()*60 + endTime.Minute()
 				minAct := int(maxRange[0].(float64))
 				maxAct := int(maxRange[1].(float64))
 
-				if endHour <= startHour || maxAct < minAct {
+				if endMin <= startMin || maxAct < minAct {
 					return
 				}
 
 				count := rand.Intn(maxAct-minAct+1) + minAct
 
 				currentDay := start.AddDate(0, 0, offset)
-				windowStart := time.Date(currentDay.Year(), currentDay.Month(), currentDay.Day(), startHour, 0, 0, 0, time.Local)
-				duration := time.Duration(endHour-startHour) * time.Hour
+				windowStart := time.Date(currentDay.Year(), currentDay.Month(), currentDay.Day(), startTime.Hour(), startTime.Minute(), 0, 0, time.Local)
+				duration := time.Duration(endMin-startMin) * time.Minute
 				interval := duration / time.Duration(count)
 
 				for i := 0; i < count; i++ {

@@ -27,9 +27,9 @@ func NewHandler(db *storage.DB, commentDB *storage.CommentDB) *CommentHandler {
 
 func (h *CommentHandler) SendComment(c *gin.Context) {
 	var request struct {
-		PostsCount   int   `json:"posts_count" binding:"required"`
-		MsgMax       []int `json:"dispatcher_activity_max" binding:"required"`
-		TimeRangeMSK []int `json:"dispatcher_period" binding:"required"`
+		PostsCount            int      `json:"posts_count" binding:"required"`
+		DispatcherActivityMax []int    `json:"dispatcher_activity_max" binding:"required"`
+		DispatcherPeriod      []string `json:"dispatcher_period" binding:"required"`
 	}
 
 	log.Printf("[HANDLER] Starting mass comment request")
@@ -39,27 +39,36 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
 		return
 	}
-	if len(request.MsgMax) != 2 || len(request.TimeRangeMSK) != 2 {
+	if len(request.DispatcherActivityMax) != 2 || len(request.DispatcherPeriod) != 2 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "dispatcher_activity_max and dispatcher_period must have exactly 2 elements"})
 		return
 	}
 
-	// Evaluate dispatcher period and activity ranges without affecting current logic.
+	// Оценка временного диапазона и лимитов активности
 	msk := time.FixedZone("MSK", 3*3600)
-	start, end := request.TimeRangeMSK[0], request.TimeRangeMSK[1]
-	hour := time.Now().In(msk).Hour()
+	startTime, err1 := time.Parse("15:04", request.DispatcherPeriod[0])
+	endTime, err2 := time.Parse("15:04", request.DispatcherPeriod[1])
+	if err1 != nil || err2 != nil {
+		log.Printf("[HANDLER ERROR] Неверный формат dispatcher_period: %v %v", err1, err2)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid dispatcher_period format"})
+		return
+	}
+	startMin := startTime.Hour()*60 + startTime.Minute()
+	endMin := endTime.Hour()*60 + endTime.Minute()
+	cur := time.Now().In(msk)
+	hourMin := cur.Hour()*60 + cur.Minute()
 	var outOfRange bool
-	if start < end {
-		outOfRange = hour < start || hour >= end
+	if startMin < endMin {
+		outOfRange = hourMin < startMin || hourMin >= endMin
 	} else {
-		outOfRange = hour < start && hour >= end
+		outOfRange = hourMin < startMin && hourMin >= endMin
 	}
 	if outOfRange {
-		log.Printf("[HANDLER DEBUG] Current hour %d is outside dispatcher period %d-%d", hour, start, end)
+		log.Printf("[HANDLER DEBUG] Текущее время вне диапазона %s-%s", request.DispatcherPeriod[0], request.DispatcherPeriod[1])
 	}
 
-	// Extract dispatcher activity bounds for future use.
-	from, to := request.MsgMax[0], request.MsgMax[1]
+	// Извлекаем границы активностей
+	from, to := request.DispatcherActivityMax[0], request.DispatcherActivityMax[1]
 	_ = from
 	_ = to
 
@@ -118,22 +127,21 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		}
 
 		now := time.Now().In(msk)
-		hour := now.Hour()
-		start, end := request.TimeRangeMSK[0], request.TimeRangeMSK[1]
+		current := now.Hour()*60 + now.Minute()
 
 		var outOfRange bool
-		if start < end {
-			outOfRange = hour < start || hour >= end
+		if startMin < endMin {
+			outOfRange = current < startMin || current >= endMin
 		} else {
-			outOfRange = hour < start && hour >= end
+			outOfRange = current < startMin && current >= endMin
 		}
 
 		if outOfRange {
-			log.Printf("[HANDLER INFO] Время %s вне диапазона %d-%d МСК, пропуск для %s", now.Format(time.RFC3339), start, end, account.Phone)
+			log.Printf("[HANDLER INFO] Время %s вне диапазона %s-%s МСК, пропуск для %s", now.Format(time.RFC3339), request.DispatcherPeriod[0], request.DispatcherPeriod[1], account.Phone)
 			continue
 		}
 
-		limit := dailyCommentLimit(account.ID, now, request.MsgMax[0], request.MsgMax[1])
+		limit := dailyCommentLimit(account.ID, now, request.DispatcherActivityMax[0], request.DispatcherActivityMax[1])
 		count, err := h.DB.CountCommentsForDate(account.ID, now)
 		if err != nil {
 			log.Printf("[HANDLER ERROR] Не удалось получить количество комментариев для %s: %v", account.Phone, err)

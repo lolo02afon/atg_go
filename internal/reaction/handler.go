@@ -30,9 +30,9 @@ func NewHandler(db *storage.DB, commentDB *storage.CommentDB) *ReactionHandler {
 // SendReaction добавляет реакции к сообщениям обсуждений во всех каналах.
 func (h *ReactionHandler) SendReaction(c *gin.Context) {
 	var request struct {
-		MsgCount              int   `json:"msg_count" binding:"required"`
-		DispatcherActivityMax []int `json:"dispatcher_activity_max" binding:"required"`
-		DispatcherPeriod      []int `json:"dispatcher_period" binding:"required"`
+		MsgCount              int      `json:"msg_count" binding:"required"`
+		DispatcherActivityMax []int    `json:"dispatcher_activity_max" binding:"required"`
+		DispatcherPeriod      []string `json:"dispatcher_period" binding:"required"`
 	}
 
 	log.Printf("[HANDLER] Запуск массовой отправки реакций")
@@ -67,6 +67,16 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 
 	msk := time.FixedZone("MSK", 3*3600)
 
+	startTime, err1 := time.Parse("15:04", request.DispatcherPeriod[0])
+	endTime, err2 := time.Parse("15:04", request.DispatcherPeriod[1])
+	if err1 != nil || err2 != nil {
+		log.Printf("[HANDLER ERROR] Неверный формат dispatcher_period: %v %v", err1, err2)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid dispatcher_period format"})
+		return
+	}
+	startMin := startTime.Hour()*60 + startTime.Minute()
+	endMin := endTime.Hour()*60 + endTime.Minute()
+
 	for i, account := range accounts {
 		// Задержка между аккаунтами
 		if i > 0 {
@@ -90,18 +100,17 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 		}
 
 		now := time.Now().In(msk)
-		hour := now.Hour()
-		start, end := request.DispatcherPeriod[0], request.DispatcherPeriod[1]
+		current := now.Hour()*60 + now.Minute()
 
 		var outOfRange bool
-		if start < end {
-			outOfRange = hour < start || hour >= end
+		if startMin < endMin {
+			outOfRange = current < startMin || current >= endMin
 		} else {
-			outOfRange = hour < start && hour >= end
+			outOfRange = current < startMin && current >= endMin
 		}
 
 		if outOfRange {
-			log.Printf("[HANDLER INFO] Время %s вне диапазона %d-%d МСК, пропуск для %s", now.Format(time.RFC3339), start, end, account.Phone)
+			log.Printf("[HANDLER INFO] Время %s вне диапазона %s-%s МСК, пропуск для %s", now.Format(time.RFC3339), request.DispatcherPeriod[0], request.DispatcherPeriod[1], account.Phone)
 			continue
 		}
 
