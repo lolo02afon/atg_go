@@ -137,7 +137,6 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		}
 
 		successCount++
-		log.Printf("[HANDLER DEBUG] Success for account: %s", account.Phone)
 	}
 
 	// Итоговый ответ (канал убран, т.к. каждый повтор выбирался свой)

@@ -82,13 +82,5 @@ func setupRouter(db *storage.DB, commentDB *storage.CommentDB) *gin.Engine {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	// Логирование зарегистрированных роутов
-	log.Printf("[ROUTER] Routes initialized:")
-	log.Printf("[ROUTER] POST /auth/CreateAccount")
-	log.Printf("[ROUTER] POST /comment/send")
-	log.Printf("[ROUTER] POST /reaction/send")
-	log.Printf("[ROUTER] POST /module/dispatcher_activity")
-	log.Printf("[ROUTER] GET /health")
-
 	return r
 }

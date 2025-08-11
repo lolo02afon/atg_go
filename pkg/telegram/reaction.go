@@ -56,7 +56,6 @@ func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID
 		if err != nil {
 			return err
 		}
-		log.Printf("[DEBUG] Найден канал ID=%d", channel.ID)
 		channelID = int(channel.ID)
 
 		// Пытаемся вступить в канал, чтобы иметь доступ к обсуждению
@@ -69,7 +68,6 @@ func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID
 		if err != nil {
 			return fmt.Errorf("не удалось получить чат обсуждения: %w", err)
 		}
-		log.Printf("[DEBUG] Чат обсуждения ID=%d", discussionChat.ID)
 
 		if errJoin := module.Modf_JoinChannel(ctx, api, discussionChat); errJoin != nil {
 			log.Printf("[ERROR] Не удалось вступить в чат обсуждения: ID=%d Ошибка=%v", discussionChat.ID, errJoin)
@@ -83,21 +81,18 @@ func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID
 		if len(allowedReactions) == 0 {
 			return fmt.Errorf("нет доступных реакций в чате")
 		}
-		log.Printf("[DEBUG] Доступные реакции: %v", allowedReactions)
 
 		// Запрашиваем последние сообщения из обсуждения
 		messages, err := module.GetChannelPosts(ctx, api, discussionChat, msgCount)
 		if err != nil {
 			return fmt.Errorf("не удалось получить сообщения обсуждения: %w", err)
 		}
-		log.Printf("[DEBUG] Получено %d сообщений", len(messages))
 
 		// Определяем сообщение, которому нужно поставить реакцию
 		targetMsg, err := selectTargetMessage(messages, db, accountID, channelID)
 		if err != nil {
 			return err
 		}
-		log.Printf("[DEBUG] Целевое сообщение ID=%d", targetMsg.ID)
 
 		// Проверяем, не слишком ли близко текущее сообщение к предыдущему
 		// Передаём ID аккаунта, канала и сообщения
@@ -112,7 +107,6 @@ func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID
 		// Выбираем реакцию: случайную из нашего списка, но если она не разрешена,
 		// используем первую разрешённую админами обсуждения.
 		reaction := pickReaction(reactionList, allowedReactions)
-		log.Printf("[DEBUG] Отправляем реакцию %s", reaction)
 
 		send := func(r string) error {
 			_, err = api.MessagesSendReaction(ctx, &tg.MessagesSendReactionRequest{
@@ -128,7 +122,6 @@ func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID
 			if tg.IsReactionInvalid(errSend) && reaction != allowedReactions[0] {
 				log.Printf("[WARN] Реакция %s недопустима: %v", reaction, errSend)
 				reaction = allowedReactions[0]
-				log.Printf("[DEBUG] Отправляем реакцию %s", reaction)
 				if errSend = send(reaction); errSend != nil {
 					return fmt.Errorf("не удалось отправить реакцию: %w", errSend)
 				}

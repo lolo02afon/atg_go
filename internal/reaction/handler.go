@@ -117,7 +117,6 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 		}
 
 		successCount++
-		log.Printf("[HANDLER DEBUG] Успех для аккаунта: %s", account.Phone)
 	}
 
 	result := gin.H{

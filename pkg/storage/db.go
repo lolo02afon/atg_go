@@ -62,8 +62,6 @@ func (db *DB) CreateAccount(account models.Account) (*models.Account, error) {
                RETURNING id
        `
 
-	log.Printf("[DB DEBUG] Создание аккаунта %s", account.Phone)
-
 	err := db.Conn.QueryRow(
 		query,
 		account.Phone,
