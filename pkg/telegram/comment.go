@@ -31,7 +31,7 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 	}
 
 	// Создаем клиент Telegram с указанными параметрами
-	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, nil)
+	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, nil, db.Conn, accountID)
 	if err != nil {
 		// При ошибке инициализации также возвращаем нулевые идентификаторы
 		return 0, 0, err

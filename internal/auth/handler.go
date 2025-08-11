@@ -84,6 +84,8 @@ func (h *AccountHandler) VerifyAccount(c *gin.Context) {
 	}
 
 	if err := telegram.CompleteAuthorization(
+		h.DB,
+		account.ID,
 		account.ApiID,
 		account.ApiHash,
 		account.Phone,

@@ -72,3 +72,11 @@ CREATE TABLE IF NOT EXISTS activity (
     activity_type TEXT NOT NULL,
     date_time TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+-- Таблица для хранения сессий аккаунтов Telegram
+CREATE TABLE IF NOT EXISTS account_session (
+    id SERIAL PRIMARY KEY,
+    date_time TIMESTAMP NOT NULL DEFAULT NOW(),
+    account INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    data_json TEXT NOT NULL
+);

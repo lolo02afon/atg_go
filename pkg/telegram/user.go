@@ -6,14 +6,15 @@ import (
 	"time"
 
 	"atg_go/models"
+	"atg_go/pkg/storage"
 	module "atg_go/pkg/telegram/module"
 
 	"github.com/gotd/td/tg"
 )
 
 // GetUserID возвращает ID пользователя Telegram для указанного аккаунта
-func GetUserID(phone string, apiID int, apiHash string, proxy *models.Proxy) (int, error) {
-	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, nil)
+func GetUserID(db *storage.DB, accountID int, phone string, apiID int, apiHash string, proxy *models.Proxy) (int, error) {
+	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, nil, db.Conn, accountID)
 	if err != nil {
 		return 0, err
 	}

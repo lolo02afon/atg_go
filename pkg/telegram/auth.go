@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"atg_go/models"
+	"atg_go/pkg/storage"
 
 	"github.com/gotd/td/telegram/auth"
 	"github.com/gotd/td/tg"
@@ -45,7 +46,7 @@ func (a AuthHelper) AcceptTermsOfService(ctx context.Context, tos tg.HelpTermsOf
 }
 
 func RequestCode(apiID int, apiHash, phone string, proxy *models.Proxy) (string, error) {
-	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, nil)
+	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, nil, nil, 0)
 	if err != nil {
 		return "", err
 	}
@@ -67,9 +68,9 @@ func RequestCode(apiID int, apiHash, phone string, proxy *models.Proxy) (string,
 	return phoneCodeHash, err
 }
 
-func CompleteAuthorization(apiID int, apiHash, phone, code, phoneCodeHash string, proxy *models.Proxy) error {
+func CompleteAuthorization(db *storage.DB, accountID, apiID int, apiHash, phone, code, phoneCodeHash string, proxy *models.Proxy) error {
 	randSrc := rand.New(rand.NewSource(time.Now().UnixNano()))
-	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, randSrc)
+	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, randSrc, db.Conn, accountID)
 	if err != nil {
 		return err
 	}
