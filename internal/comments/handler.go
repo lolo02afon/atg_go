@@ -27,7 +27,9 @@ func NewHandler(db *storage.DB, commentDB *storage.CommentDB) *CommentHandler {
 
 func (h *CommentHandler) SendComment(c *gin.Context) {
 	var request struct {
-		PostsCount int `json:"posts_count" binding:"required"`
+		PostsCount            int   `json:"posts_count" binding:"required"`
+		DispatcherActivityMax []int `json:"dispatcher_activity_max" binding:"required"`
+		DispatcherPeriod      []int `json:"dispatcher_period" binding:"required"`
 	}
 
 	log.Printf("[HANDLER] Starting mass comment request")
@@ -35,6 +37,10 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 	if err := c.ShouldBindJSON(&request); err != nil {
 		log.Printf("[HANDLER ERROR] Invalid request: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		return
+	}
+	if len(request.DispatcherActivityMax) != 2 || len(request.DispatcherPeriod) != 2 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "dispatcher_activity_max and dispatcher_period must have exactly 2 elements"})
 		return
 	}
 
@@ -67,7 +73,6 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		}
 		userIDs = append(userIDs, id)
 	}
-
 	for i, account := range accounts {
 		// Задержка между аккаунтами (чтобы не слишком быстро подряд)
 		if i > 0 {
