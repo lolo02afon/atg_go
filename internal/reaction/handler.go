@@ -30,7 +30,9 @@ func NewHandler(db *storage.DB, commentDB *storage.CommentDB) *ReactionHandler {
 // SendReaction добавляет реакции к сообщениям обсуждений во всех каналах.
 func (h *ReactionHandler) SendReaction(c *gin.Context) {
 	var request struct {
-		MsgCount int `json:"msg_count" binding:"required"`
+		MsgCount              int   `json:"msg_count" binding:"required"`
+		DispatcherActivityMax []int `json:"dispatcher_activity_max" binding:"required"`
+		DispatcherPeriod      []int `json:"dispatcher_period" binding:"required"`
 	}
 
 	log.Printf("[HANDLER] Запуск массовой отправки реакций")
@@ -38,6 +40,10 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 	if err := c.ShouldBindJSON(&request); err != nil {
 		log.Printf("[HANDLER ERROR] Неверный формат запроса: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		return
+	}
+	if len(request.DispatcherActivityMax) != 2 || len(request.DispatcherPeriod) != 2 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "dispatcher_activity_max and dispatcher_period must have exactly 2 elements"})
 		return
 	}
 
