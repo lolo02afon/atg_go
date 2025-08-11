@@ -2,7 +2,6 @@ package module
 
 import (
 	"net/http"
-	"time"
 
 	telegrammodule "atg_go/pkg/telegram/module"
 
@@ -19,9 +18,7 @@ func NewHandler() *Handler { return &Handler{} }
 // Ожидает JSON со списком activity_request, где у каждого запроса есть url и request_body.
 func (h *Handler) DispatcherActivity(c *gin.Context) {
 	var req struct {
-		TimeDelay int `json:"time_delay" binding:"required"`
-
-		Repeat          int                              `json:"repeat" binding:"required"`
+		DaysNumber      int                              `json:"days_number" binding:"required"`
 		ActivityRequest []telegrammodule.ActivityRequest `json:"activity_request" binding:"required"` // каждый элемент содержит url и произвольное request_body
 	}
 
@@ -30,7 +27,8 @@ func (h *Handler) DispatcherActivity(c *gin.Context) {
 		return
 	}
 
-	telegrammodule.ModF_DispatcherActivity(time.Duration(req.TimeDelay)*time.Second, req.Repeat, req.ActivityRequest)
+	// Запускаем выполнение активностей в течение заданного количества суток
+	telegrammodule.ModF_DispatcherActivity(req.DaysNumber, req.ActivityRequest)
 
 	c.JSON(http.StatusOK, gin.H{"status": "completed"})
 }
