@@ -116,6 +116,34 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 			}
 		}
 
+		now := time.Now().In(msk)
+		hour := now.Hour()
+		start, end := request.TimeRangeMSK[0], request.TimeRangeMSK[1]
+
+		var outOfRange bool
+		if start < end {
+			outOfRange = hour < start || hour >= end
+		} else {
+			outOfRange = hour < start && hour >= end
+		}
+
+		if outOfRange {
+			log.Printf("[HANDLER INFO] Время %s вне диапазона %d-%d МСК, пропуск для %s", now.Format(time.RFC3339), start, end, account.Phone)
+			continue
+		}
+
+		limit := dailyCommentLimit(account.ID, now, request.MsgMax[0], request.MsgMax[1])
+		count, err := h.DB.CountCommentsForDate(account.ID, now)
+		if err != nil {
+			log.Printf("[HANDLER ERROR] Не удалось получить количество комментариев для %s: %v", account.Phone, err)
+			errorCount++
+			continue
+		}
+		if count >= limit {
+			log.Printf("[HANDLER INFO] Достигнут дневной лимит комментариев (%d/%d) для %s", count, limit, account.Phone)
+			continue
+		}
+
 		// --- НОВАЯ ЛОГИКА: выбор канала для каждого аккаунта ---
 		channelURL, err := h.CommentDB.GetRandomChannel()
 		if errors.Is(err, sql.ErrNoRows) {
@@ -173,4 +201,14 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 	}
 	log.Printf("[HANDLER INFO] Final result: %+v", result)
 	c.JSON(http.StatusOK, result)
+}
+
+func dailyCommentLimit(accountID int, date time.Time, min, max int) int {
+	if max < min {
+		max = min
+	}
+	day := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
+	seed := int64(accountID) + day.Unix()
+	r := rand.New(rand.NewSource(seed))
+	return min + r.Intn(max-min+1)
 }
