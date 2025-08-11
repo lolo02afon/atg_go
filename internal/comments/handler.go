@@ -27,9 +27,9 @@ func NewHandler(db *storage.DB, commentDB *storage.CommentDB) *CommentHandler {
 
 func (h *CommentHandler) SendComment(c *gin.Context) {
 	var request struct {
-		PostsCount  int   `json:"posts_count" binding:"required"`
-		ActivityMax []int `json:"activity_max" binding:"required"`
-		Period      []int `json:"period" binding:"required"`
+		PostsCount            int   `json:"posts_count" binding:"required"`
+		DispatcherActivityMax []int `json:"dispatcher_activity_max" binding:"required"`
+		DispatcherPeriod      []int `json:"dispatcher_period" binding:"required"`
 	}
 
 	log.Printf("[HANDLER] Starting mass comment request")
@@ -39,8 +39,8 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
 		return
 	}
-	if len(request.ActivityMax) != 2 || len(request.Period) != 2 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "activity_max and period must have exactly 2 elements"})
+	if len(request.DispatcherActivityMax) != 2 || len(request.DispatcherPeriod) != 2 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "dispatcher_activity_max and dispatcher_period must have exactly 2 elements"})
 		return
 	}
 
