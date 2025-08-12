@@ -1,9 +1,14 @@
 package module
 
-import "github.com/gin-gonic/gin"
+import (
+	"atg_go/pkg/storage"
+
+	"github.com/gin-gonic/gin"
+)
 
 // SetupRoutes регистрирует маршруты модуля.
-func SetupRoutes(r *gin.RouterGroup) {
-	handler := NewHandler()
+func SetupRoutes(r *gin.RouterGroup, db *storage.DB) {
+	handler := NewHandler(db)
 	r.POST("/dispatcher_activity", handler.DispatcherActivity)
+	r.POST("/unsubscribe", handler.Unsubscribe)
 }
