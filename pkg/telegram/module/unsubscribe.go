@@ -66,7 +66,7 @@ func unsubscribeAccount(db *storage.DB, acc *models.Account, delay [2]int, limit
 					if _, err := api.ChannelsLeaveChannel(ctx, &tg.InputChannel{ChannelID: ch.ID, AccessHash: ch.AccessHash}); err != nil {
 						log.Printf("[UNSUBSCRIBE] аккаунт %d не покинул канал %d: %v", acc.ID, ch.ID, err)
 					} else {
-						log.Printf("[UNSUBSCRIBE] аккаунт %d покинул канал %d", acc.ID, ch.ID)
+						log.Printf("[UNSUBSCRIBE] аккаунт %d покинул канал %d (%s)", acc.ID, ch.ID, channelAddress(ch))
 						count++
 					}
 				}
@@ -92,6 +92,14 @@ func findChannel(chats []tg.ChatClass, id int64) *tg.Channel {
 		}
 	}
 	return nil
+}
+
+// channelAddress формирует ссылку на канал или возвращает заглушку, если адреса нет.
+func channelAddress(ch *tg.Channel) string {
+	if ch.Username != "" {
+		return "https://t.me/" + ch.Username
+	}
+	return "адрес недоступен"
 }
 
 // randomDelay возвращает случайную задержку в заданном диапазоне.

@@ -39,7 +39,23 @@ func (h *Handler) DispatcherActivity(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "completed"})
 }
 
-// Unsubscribe отключает указанное количество каналов и групп для всех аккаунтов.
+// Unsubscribe обрабатывает POST /module/unsubscribe.
+//
+// Запрос (JSON):
+//
+//	{
+//	  "delay": [min, max],               // массив из двух чисел с диапазоном задержки в секундах
+//	  "number_channels_or_groups": N     // количество каналов/групп (1–9)
+//	}
+//
+// Ответ (200, JSON):
+// { "status": "completed" }
+//
+// Возможные ошибки:
+// - 400: неверный формат запроса
+// - 400: delay должен содержать два значения
+// - 400: number_channels_or_groups должен быть числом от 1 до 9
+// - 500: внутренняя ошибка отписки
 func (h *Handler) Unsubscribe(c *gin.Context) {
 	var req struct {
 		Delay                  []int `json:"delay" binding:"required"`
