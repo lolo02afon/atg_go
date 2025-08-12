@@ -75,7 +75,7 @@ func setupRouter(db *storage.DB, commentDB *storage.CommentDB) *gin.Engine {
 
 	// Группа роутов для telegram-модуля
 	moduleGroup := r.Group("/module")
-	module.SetupRoutes(moduleGroup)
+	module.SetupRoutes(moduleGroup, db)
 
 	// Health check endpoint
 	r.GET("/health", func(c *gin.Context) {
