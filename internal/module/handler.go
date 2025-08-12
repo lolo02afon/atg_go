@@ -2,6 +2,7 @@ package module
 
 import (
 	"net/http"
+	"strconv"
 
 	"atg_go/pkg/storage"
 	telegrammodule "atg_go/pkg/telegram/module"
@@ -40,7 +41,23 @@ func (h *Handler) DispatcherActivity(c *gin.Context) {
 
 // Unsubscribe отключает все аккаунты от всех каналов и групп.
 func (h *Handler) Unsubscribe(c *gin.Context) {
-	if err := telegrammodule.ModF_UnsubscribeAll(h.DB); err != nil {
+	delayValues := c.QueryArray("delay")
+	if len(delayValues) != 2 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "нужно передать два значения параметра delay"})
+		return
+	}
+
+	var delayRange [2]int
+	for i, v := range delayValues {
+		d, err := strconv.Atoi(v)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "delay должен содержать числа"})
+			return
+		}
+		delayRange[i] = d
+	}
+
+	if err := telegrammodule.ModF_UnsubscribeAll(h.DB, delayRange); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
