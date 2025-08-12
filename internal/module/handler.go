@@ -1,6 +1,7 @@
 package module
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 
@@ -39,25 +40,32 @@ func (h *Handler) DispatcherActivity(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "completed"})
 }
 
-// Unsubscribe отключает все аккаунты от всех каналов и групп.
+// Unsubscribe отключает указанное количество каналов и групп для всех аккаунтов.
 func (h *Handler) Unsubscribe(c *gin.Context) {
-	delayValues := c.QueryArray("delay")
-	if len(delayValues) != 2 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "нужно передать два значения параметра delay"})
+	var req struct {
+		Delay                  []int `json:"delay" binding:"required"`
+		NumberChannelsOrGroups int   `json:"number_channels_or_groups" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "неверный формат запроса"})
 		return
 	}
 
-	var delayRange [2]int
-	for i, v := range delayValues {
-		d, err := strconv.Atoi(v)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "delay должен содержать числа"})
-			return
-		}
-		delayRange[i] = d
+	if len(req.Delay) != 2 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "delay должен содержать два значения"})
+		return
 	}
 
-	if err := telegrammodule.ModF_UnsubscribeAll(h.DB, delayRange); err != nil {
+	if req.NumberChannelsOrGroups <= 0 || req.NumberChannelsOrGroups > 9 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "number_channels_or_groups должен быть числом от 1 до 9"})
+		return
+	}
+
+	delayRange := [2]int{req.Delay[0], req.Delay[1]}
+	log.Printf("[UNSUBSCRIBE] запрос: delay=%v, count=%d", delayRange, req.NumberChannelsOrGroups)
+
+	if err := telegrammodule.ModF_UnsubscribeAll(h.DB, delayRange, req.NumberChannelsOrGroups); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

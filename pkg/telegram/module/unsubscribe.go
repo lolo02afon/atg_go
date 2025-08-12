@@ -12,23 +12,26 @@ import (
 	"github.com/gotd/td/tg"
 )
 
-// ModF_UnsubscribeAll отключает все аккаунты от каналов и групп.
-func ModF_UnsubscribeAll(db *storage.DB, delay [2]int) error {
+// ModF_UnsubscribeAll отключает указанное количество каналов и групп у всех аккаунтов.
+func ModF_UnsubscribeAll(db *storage.DB, delay [2]int, limit int) error {
 	rand.Seed(time.Now().UnixNano())
 	accounts, err := db.GetAuthorizedAccounts()
 	if err != nil {
 		return err
 	}
 	for _, acc := range accounts {
-		if err := unsubscribeAccount(db, &acc, delay); err != nil {
+		log.Printf("[UNSUBSCRIBE] аккаунт %d: начало обработки", acc.ID)
+		if err := unsubscribeAccount(db, &acc, delay, limit); err != nil {
 			log.Printf("[UNSUBSCRIBE] аккаунт %d: %v", acc.ID, err)
+		} else {
+			log.Printf("[UNSUBSCRIBE] аккаунт %d: завершено", acc.ID)
 		}
 	}
 	return nil
 }
 
-// unsubscribeAccount выходит из всех каналов и групп для одного аккаунта.
-func unsubscribeAccount(db *storage.DB, acc *models.Account, delay [2]int) error {
+// unsubscribeAccount выходит из указанного количества каналов и групп для одного аккаунта.
+func unsubscribeAccount(db *storage.DB, acc *models.Account, delay [2]int, limit int) error {
 	client, err := Modf_AccountInitialization(acc.ApiID, acc.ApiHash, acc.Phone, acc.Proxy, nil, db.Conn, acc.ID)
 	if err != nil {
 		return err
@@ -36,7 +39,10 @@ func unsubscribeAccount(db *storage.DB, acc *models.Account, delay [2]int) error
 	ctx := context.Background()
 	return client.Run(ctx, func(ctx context.Context) error {
 		api := tg.NewClient(client)
-		res, err := api.MessagesGetDialogs(ctx, &tg.MessagesGetDialogsRequest{Limit: 100, OffsetPeer: &tg.InputPeerEmpty{}})
+		res, err := api.MessagesGetDialogs(ctx, &tg.MessagesGetDialogsRequest{
+			Limit:      100,
+			OffsetPeer: &tg.InputPeerEmpty{},
+		})
 		if err != nil {
 			return err
 		}
@@ -44,7 +50,11 @@ func unsubscribeAccount(db *storage.DB, acc *models.Account, delay [2]int) error
 		if !ok {
 			return nil
 		}
+		count := 0
 		for _, raw := range dialogs.GetDialogs() {
+			if count >= limit {
+				break
+			}
 			d, ok := raw.(*tg.Dialog)
 			if !ok {
 				continue
@@ -54,13 +64,19 @@ func unsubscribeAccount(db *storage.DB, acc *models.Account, delay [2]int) error
 				if ch := findChannel(dialogs.GetChats(), peer.ChannelID); ch != nil {
 					time.Sleep(randomDelay(delay))
 					if _, err := api.ChannelsLeaveChannel(ctx, &tg.InputChannel{ChannelID: ch.ID, AccessHash: ch.AccessHash}); err != nil {
-						log.Printf("[UNSUBSCRIBE] не удалось покинуть канал %d: %v", ch.ID, err)
+						log.Printf("[UNSUBSCRIBE] аккаунт %d не покинул канал %d: %v", acc.ID, ch.ID, err)
+					} else {
+						log.Printf("[UNSUBSCRIBE] аккаунт %d покинул канал %d", acc.ID, ch.ID)
+						count++
 					}
 				}
 			case *tg.PeerChat:
 				time.Sleep(randomDelay(delay))
 				if _, err := api.MessagesDeleteChatUser(ctx, &tg.MessagesDeleteChatUserRequest{ChatID: peer.ChatID, UserID: &tg.InputUserSelf{}}); err != nil {
-					log.Printf("[UNSUBSCRIBE] не удалось покинуть группу %d: %v", peer.ChatID, err)
+					log.Printf("[UNSUBSCRIBE] аккаунт %d не покинул группу %d: %v", acc.ID, peer.ChatID, err)
+				} else {
+					log.Printf("[UNSUBSCRIBE] аккаунт %d покинул группу %d", acc.ID, peer.ChatID)
+					count++
 				}
 			}
 		}
