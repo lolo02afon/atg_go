@@ -45,7 +45,7 @@ func (h *Handler) DispatcherActivity(c *gin.Context) {
 //
 //	{
 //	  "delay": [min, max],               // массив из двух чисел с диапазоном задержки в секундах
-//	  "number_channels_or_groups": N     // количество каналов/групп (1–9)
+//	  "number_channels_or_groups": N     // количество каналов/групп (>= 0)
 //	}
 //
 // Ответ (200, JSON):
@@ -54,7 +54,7 @@ func (h *Handler) DispatcherActivity(c *gin.Context) {
 // Возможные ошибки:
 // - 400: неверный формат запроса
 // - 400: delay должен содержать два значения
-// - 400: number_channels_or_groups должен быть числом от 1 до 9
+// - 400: number_channels_or_groups должен быть неотрицательным числом
 // - 500: внутренняя ошибка отписки
 func (h *Handler) Unsubscribe(c *gin.Context) {
 	var req struct {
@@ -72,8 +72,8 @@ func (h *Handler) Unsubscribe(c *gin.Context) {
 		return
 	}
 
-	if req.NumberChannelsOrGroups <= 0 || req.NumberChannelsOrGroups > 9 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "number_channels_or_groups должен быть числом от 1 до 9"})
+	if req.NumberChannelsOrGroups < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "number_channels_or_groups должен быть неотрицательным числом"})
 		return
 	}
 
