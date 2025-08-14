@@ -1,13 +1,48 @@
 package account_mutex
 
-import pkgmutex "atg_go/pkg/telegram/module/account_mutex"
+import (
+	"fmt"
+	"log"
+	"sync"
+)
 
-// LockAccount экспортирует блокировку аккаунта для внутренних пакетов.
+var (
+	globalMu     sync.Mutex
+	accountLocks = make(map[int]*sync.Mutex)
+)
+
+// LockAccount пытается захватить мьютекс для указанного аккаунта.
+// Если аккаунт уже используется, возвращается ошибка.
+// В журнал записывается информация о попытке, успешной блокировке
+// и отказе в случае занятости.
 func LockAccount(accountID int) error {
-	return pkgmutex.LockAccount(accountID)
+	log.Printf("[MUTEX] попытка блокировки аккаунта %d", accountID)
+
+	globalMu.Lock()
+	lock, ok := accountLocks[accountID]
+	if !ok {
+		lock = &sync.Mutex{}
+		accountLocks[accountID] = lock
+	}
+	globalMu.Unlock()
+
+	if !lock.TryLock() {
+		log.Printf("[MUTEX] аккаунт %d занят", accountID)
+		return fmt.Errorf("аккаунт %d уже используется", accountID)
+	}
+
+	log.Printf("[MUTEX] аккаунт %d заблокирован", accountID)
+	return nil
 }
 
-// UnlockAccount освобождает блокировку аккаунта.
+// UnlockAccount освобождает мьютекс для указанного аккаунта
+// и записывает это событие в журнал.
 func UnlockAccount(accountID int) {
-	pkgmutex.UnlockAccount(accountID)
+	globalMu.Lock()
+	lock := accountLocks[accountID]
+	globalMu.Unlock()
+	if lock != nil {
+		lock.Unlock()
+		log.Printf("[MUTEX] аккаунт %d разблокирован", accountID)
+	}
 }
