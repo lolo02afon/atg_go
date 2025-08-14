@@ -2,6 +2,7 @@ package module
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"math/rand"
 	"net/http"
@@ -27,12 +28,18 @@ type ActivitySettings struct {
 }
 
 // ModF_DispatcherActivity выполняет запросы активности в течение
-// заданного количества суток.
-func ModF_DispatcherActivity(daysNumber int, activities []ActivityRequest, commentCfg, reactionCfg ActivitySettings) {
+// заданного количества суток и реагирует на отмену контекста.
+func ModF_DispatcherActivity(ctx context.Context, daysNumber int, activities []ActivityRequest, commentCfg, reactionCfg ActivitySettings) {
 	rand.Seed(time.Now().UnixNano())
 	start := time.Now()
 
 	for day := 0; day < daysNumber; day++ {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
 		var wg sync.WaitGroup
 
 		for _, act := range activities {
@@ -75,12 +82,22 @@ func ModF_DispatcherActivity(daysNumber int, activities []ActivityRequest, comme
 				interval := duration / time.Duration(count)
 
 				for i := 0; i < count; i++ {
+					select {
+					case <-ctx.Done():
+						return
+					default:
+					}
+
 					t := windowStart.Add(interval * time.Duration(i))
 					if sleep := time.Until(t); sleep > 0 {
-						time.Sleep(sleep)
+						select {
+						case <-time.After(sleep):
+						case <-ctx.Done():
+							return
+						}
 					}
 					payload, _ := json.Marshal(act.RequestBody)
-					req, err := http.NewRequest("POST", act.URL, bytes.NewBuffer(payload))
+					req, err := http.NewRequestWithContext(ctx, "POST", act.URL, bytes.NewBuffer(payload))
 					if err != nil {
 						continue
 					}

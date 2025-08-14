@@ -1,8 +1,10 @@
 package module
 
 import (
+	"context"
 	"log"
 	"net/http"
+	"sync"
 
 	"atg_go/pkg/storage"
 	telegrammodule "atg_go/pkg/telegram/module"
@@ -11,12 +13,19 @@ import (
 )
 
 // Handler обрабатывает запросы к модулю Telegram.
+// Handler обрабатывает запросы к модулю Telegram и хранит активные задачи.
 type Handler struct {
 	DB *storage.DB
+
+	mu    sync.Mutex
+	tasks map[int]context.CancelFunc
+	next  int
 }
 
 // NewHandler создает новый экземпляр обработчика.
-func NewHandler(db *storage.DB) *Handler { return &Handler{DB: db} }
+func NewHandler(db *storage.DB) *Handler {
+	return &Handler{DB: db, tasks: make(map[int]context.CancelFunc)}
+}
 
 // DispatcherActivity запускает модульную активность диспатчера.
 // Ожидает JSON со списком activity_request, где у каждого запроса есть url и request_body.
@@ -33,10 +42,38 @@ func (h *Handler) DispatcherActivity(c *gin.Context) {
 		return
 	}
 
-	// Запускаем выполнение активностей в течение заданного количества суток
-	telegrammodule.ModF_DispatcherActivity(req.DaysNumber, req.ActivityRequest, req.ActivityComment, req.ActivityReaction)
+	// Запускаем задачу в отдельной горутине с возможностью отмены.
+	ctx, cancel := context.WithCancel(context.Background())
 
-	c.JSON(http.StatusOK, gin.H{"status": "completed"})
+	h.mu.Lock()
+	id := h.next
+	h.next++
+	h.tasks[id] = cancel
+	h.mu.Unlock()
+
+	go func(taskID int) {
+		defer func() {
+			h.mu.Lock()
+			delete(h.tasks, taskID)
+			h.mu.Unlock()
+		}()
+		telegrammodule.ModF_DispatcherActivity(ctx, req.DaysNumber, req.ActivityRequest, req.ActivityComment, req.ActivityReaction)
+	}(id)
+
+	c.JSON(http.StatusOK, gin.H{"status": "запущено", "task_id": id})
+}
+
+// CancelAllDispatcherActivity отменяет все активные задачи DispatcherActivity.
+func (h *Handler) CancelAllDispatcherActivity(c *gin.Context) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	for id, cancel := range h.tasks {
+		cancel()
+		delete(h.tasks, id)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "все задачи остановлены"})
 }
 
 // Unsubscribe обрабатывает POST /module/unsubscribe.
