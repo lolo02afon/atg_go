@@ -10,6 +10,7 @@ import (
 	"atg_go/models"
 	"atg_go/pkg/storage"
 	module "atg_go/pkg/telegram/module"
+	accountmutex "atg_go/pkg/telegram/module/account_mutex"
 
 	"github.com/gotd/td/tg"
 )
@@ -22,6 +23,13 @@ import (
 // ошибку. При неудаче оба идентификатора равны 0.
 func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID int, apiHash string, msgCount int, proxy *models.Proxy) (int, int, error) {
 	log.Printf("[START] Отправка реакции в канал %s от имени %s", channelURL, phone)
+
+	// Захватываем мьютекс для аккаунта, чтобы исключить параллельное использование
+	if err := accountmutex.LockAccount(accountID); err != nil {
+		return 0, 0, err
+	}
+	// Освобождаем мьютекс по завершении работы
+	defer accountmutex.UnlockAccount(accountID)
 
 	username, err := module.Modf_ExtractUsername(channelURL)
 	if err != nil {
