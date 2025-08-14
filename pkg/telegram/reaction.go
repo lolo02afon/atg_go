@@ -10,7 +10,7 @@ import (
 	"atg_go/models"
 	"atg_go/pkg/storage"
 	module "atg_go/pkg/telegram/module"
-	accountdeadlock "atg_go/pkg/telegram/module/account_deadlock"
+	accountmutex "atg_go/pkg/telegram/module/account_mutex"
 
 	"github.com/gotd/td/tg"
 )
@@ -25,11 +25,11 @@ func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID
 	log.Printf("[START] Отправка реакции в канал %s от имени %s", channelURL, phone)
 
 	// Захватываем мьютекс для аккаунта, чтобы исключить параллельное использование
-	if err := accountdeadlock.LockAccount(accountID); err != nil {
+	if err := accountmutex.LockAccount(accountID); err != nil {
 		return 0, 0, err
 	}
 	// Освобождаем мьютекс по завершении работы
-	defer accountdeadlock.UnlockAccount(accountID)
+	defer accountmutex.UnlockAccount(accountID)
 
 	username, err := module.Modf_ExtractUsername(channelURL)
 	if err != nil {

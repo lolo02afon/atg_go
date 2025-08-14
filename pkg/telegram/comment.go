@@ -10,7 +10,7 @@ import (
 	"atg_go/models"
 	"atg_go/pkg/storage"
 	module "atg_go/pkg/telegram/module"
-	accountdeadlock "atg_go/pkg/telegram/module/account_deadlock"
+	accountmutex "atg_go/pkg/telegram/module/account_mutex"
 
 	"github.com/gotd/td/tg"
 )
@@ -25,11 +25,11 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 	log.Printf("[START] Отправка эмодзи в канал %s от имени %s", channelURL, phone)
 
 	// Блокируем аккаунт, чтобы избежать параллельного использования
-	if err := accountdeadlock.LockAccount(accountID); err != nil {
+	if err := accountmutex.LockAccount(accountID); err != nil {
 		return 0, 0, err
 	}
 	// Гарантируем освобождение мьютекса после завершения работы
-	defer accountdeadlock.UnlockAccount(accountID)
+	defer accountmutex.UnlockAccount(accountID)
 
 	// Извлекаем username из URL канала (например, из "https://t.me/channel" извлекаем "channel")
 	username, err := module.Modf_ExtractUsername(channelURL)
