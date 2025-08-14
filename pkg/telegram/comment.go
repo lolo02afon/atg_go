@@ -7,7 +7,6 @@ import (
 	"math/rand"
 	"time"
 
-	accountmutex "atg_go/internal/module/account_mutex"
 	"atg_go/models"
 	"atg_go/pkg/storage"
 	module "atg_go/pkg/telegram/module"
