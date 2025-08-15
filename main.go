@@ -6,6 +6,7 @@ import (
 	"atg_go/internal/middleware"
 	module "atg_go/internal/module"
 	reaction "atg_go/internal/reaction"
+	statistics "atg_go/internal/statistics"
 	"atg_go/pkg/storage"
 	"database/sql"
 	"log"
@@ -76,6 +77,10 @@ func setupRouter(db *storage.DB, commentDB *storage.CommentDB) *gin.Engine {
 	// Группа роутов для telegram-модуля
 	moduleGroup := r.Group("/module")
 	module.SetupRoutes(moduleGroup, db)
+
+	// Группа роутов для статистики
+	statsGroup := r.Group("/statistics")
+	statistics.SetupRoutes(statsGroup, db)
 
 	// Health check endpoint
 	r.GET("/health", func(c *gin.Context) {
