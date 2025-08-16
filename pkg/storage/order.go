@@ -159,8 +159,14 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 
+	// Сначала собираем данные о нуждающихся в аккаунтах заказах,
+	// чтобы не выполнять другие запросы, пока курсор не закрыт
+	type need struct {
+		id   int
+		diff int
+	}
+	var needs []need
 	for rows.Next() {
 		var (
 			id     int
@@ -168,14 +174,23 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 			fact   int
 		)
 		if err := rows.Scan(&id, &theory, &fact); err != nil {
+			rows.Close()
 			return err
 		}
-		diff := theory - fact
+		needs = append(needs, need{id: id, diff: theory - fact})
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	// Теперь можно закрыть курсор, чтобы освободить соединение
+	rows.Close()
 
-		// Выбираем свободные авторизованные аккаунты в случайном порядке
+	// Для каждого заказа выделяем свободные аккаунты
+	for _, n := range needs {
 		accRows, err := tx.Query(
 			`SELECT id FROM accounts WHERE order_id IS NULL AND is_authorized = TRUE ORDER BY RANDOM() LIMIT $1`,
-			diff,
+			n.diff,
 		)
 		if err != nil {
 			return err
@@ -188,17 +203,15 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 				accRows.Close()
 				return err
 			}
-			if _, err := tx.Exec(`UPDATE accounts SET order_id = $1 WHERE id = $2`, id, accID); err != nil {
+			if _, err := tx.Exec(`UPDATE accounts SET order_id = $1 WHERE id = $2`, n.id, accID); err != nil {
 				accRows.Close()
 				return err
 			}
 			assigned++
 		}
 		accRows.Close()
-		log.Printf("[DB INFO] Заказ %d, добавлено аккаунтов: %d", id, assigned)
+		log.Printf("[DB INFO] Заказ %d, добавлено аккаунтов: %d", n.id, assigned)
 	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
+
 	return tx.Commit()
 }
