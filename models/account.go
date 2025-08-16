@@ -8,5 +8,6 @@ type Account struct {
 	IsAuthorized  bool   `json:"is_authorized"`
 	PhoneCodeHash string `json:"phone_code_hash"`
 	ProxyID       *int   `json:"proxy_id"`
+	OrderID       *int   `json:"order_id"` // ID выполняемого заказа (NULL, если аккаунт свободен)
 	Proxy         *Proxy `json:"proxy"`
 }
