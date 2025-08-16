@@ -73,8 +73,17 @@ func unsubscribeAccount(db *storage.DB, acc *models.Account, delay [2]int, limit
 		for _, ch := range dialogs.GetChats() {
 			if c, ok := ch.(*tg.Channel); ok {
 				if _, banned := skip[strings.ToLower(c.Username)]; banned {
-					if c.LinkedChatID != 0 {
-						bannedChats[c.LinkedChatID] = struct{}{}
+					// Если у канала есть привязанный чат, получаем его ID
+					if c.HasLink {
+						full, err := api.ChannelsGetFullChannel(ctx, &tg.InputChannel{ChannelID: c.ID, AccessHash: c.AccessHash})
+						if err != nil {
+							// Логируем ошибку и пропускаем канал, чтобы не прерывать обработку
+							log.Printf("[UNSUBSCRIBE] канал %d: не удалось получить связанный чат: %v", c.ID, err)
+							continue
+						}
+						if chFull, ok := full.FullChat.(*tg.ChannelFull); ok && chFull.LinkedChatID != 0 {
+							bannedChats[chFull.LinkedChatID] = struct{}{}
+						}
 					}
 				}
 			}
