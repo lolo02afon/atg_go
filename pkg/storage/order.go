@@ -86,19 +86,28 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 		if err != nil {
 			return nil, err
 		}
-		defer rows.Close()
-		added := 0
+
+		var ids []int
 		for rows.Next() {
 			var id int
 			if err := rows.Scan(&id); err != nil {
+				rows.Close()
 				return nil, err
 			}
+			ids = append(ids, id)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		rows.Close()
+
+		for _, id := range ids {
 			if _, err := tx.Exec(`UPDATE accounts SET order_id = $1 WHERE id = $2`, orderID, id); err != nil {
 				return nil, err
 			}
-			added++
 		}
-		o.AccountsNumberFact += added
+		o.AccountsNumberFact += len(ids)
 	} else if newNumber < o.AccountsNumberFact {
 		// Освобождаем лишние аккаунты
 		diff := o.AccountsNumberFact - newNumber
@@ -106,19 +115,28 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 		if err != nil {
 			return nil, err
 		}
-		defer rows.Close()
-		removed := 0
+
+		var ids []int
 		for rows.Next() {
 			var id int
 			if err := rows.Scan(&id); err != nil {
+				rows.Close()
 				return nil, err
 			}
+			ids = append(ids, id)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		rows.Close()
+
+		for _, id := range ids {
 			if _, err := tx.Exec(`UPDATE accounts SET order_id = NULL WHERE id = $1`, id); err != nil {
 				return nil, err
 			}
-			removed++
 		}
-		o.AccountsNumberFact -= removed
+		o.AccountsNumberFact -= len(ids)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -196,21 +214,30 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 			return err
 		}
 
-		assigned := 0
+		// Сначала собираем идентификаторы свободных аккаунтов в срез
+		var accIDs []int
 		for accRows.Next() {
 			var accID int
 			if err := accRows.Scan(&accID); err != nil {
 				accRows.Close()
 				return err
 			}
+			accIDs = append(accIDs, accID)
+		}
+		if err := accRows.Err(); err != nil {
+			accRows.Close()
+			return err
+		}
+		// Курсор больше не нужен, закрываем перед выполнением обновлений
+		accRows.Close()
+
+		// Теперь обновляем аккаунты, назначая им order_id
+		for _, accID := range accIDs {
 			if _, err := tx.Exec(`UPDATE accounts SET order_id = $1 WHERE id = $2`, n.id, accID); err != nil {
-				accRows.Close()
 				return err
 			}
-			assigned++
 		}
-		accRows.Close()
-		log.Printf("[DB INFO] Заказ %d, добавлено аккаунтов: %d", n.id, assigned)
+		log.Printf("[DB INFO] Заказ %d, добавлено аккаунтов: %d", n.id, len(accIDs))
 	}
 
 	return tx.Commit()
