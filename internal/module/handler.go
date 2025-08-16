@@ -123,3 +123,13 @@ func (h *Handler) Unsubscribe(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "completed"})
 }
+
+// OrderLinkUpdate обрабатывает запрос на обновление ссылок в описании аккаунтов
+func (h *Handler) OrderLinkUpdate(c *gin.Context) {
+	if err := telegrammodule.Modf_OrderLinkUpdate(h.DB); err != nil {
+		log.Printf("[HANDLER ERROR] обновление ссылок: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "links updated"})
+}
