@@ -168,7 +168,7 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 	}
 	defer tx.Rollback()
 
-	// Получаем все заказы и считаем разницу между требуемым и фактическим количеством аккаунтов
+	// Получаем все заказы и загружаем их в память, чтобы затем закрыть курсор
 	rows, err := tx.Query(`SELECT id, accounts_number_theory, accounts_number_fact FROM orders`)
 	if err != nil {
 		log.Printf("[DB ERROR] выборка заказов: %v", err)
@@ -176,16 +176,34 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 	}
 	defer rows.Close()
 
+	type orderData struct {
+		id     int
+		theory int
+		fact   int
+	}
+	var orders []orderData
+
+	// Считываем все заказы из курсора
 	for rows.Next() {
-		var (
-			orderID int
-			theory  int
-			fact    int
-		)
-		if err := rows.Scan(&orderID, &theory, &fact); err != nil {
+		var o orderData
+		if err := rows.Scan(&o.id, &o.theory, &o.fact); err != nil {
 			log.Printf("[DB ERROR] чтение заказа: %v", err)
 			return err
 		}
+		orders = append(orders, o)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("[DB ERROR] курсор заказов: %v", err)
+		return err
+	}
+	// Закрываем курсор до выполнения дальнейших запросов, чтобы освободить соединение
+	rows.Close()
+
+	// Обрабатываем каждый заказ по отдельности
+	for _, o := range orders {
+		orderID := o.id
+		theory := o.theory
+		fact := o.fact
 
 		// Считаем реальное количество аккаунтов, закреплённых за заказом
 		var actual int
