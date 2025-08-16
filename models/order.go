@@ -15,6 +15,7 @@ type Order struct {
 	ID                   int       `json:"id"`
 	Name                 string    `json:"name"`
 	URL                  string    `json:"url"`
+	URLDefault           string    `json:"url_default"` // ссылку из этого поля нельзя отписывать
 	AccountsNumberTheory int       `json:"accounts_number_theory"`
 	AccountsNumberFact   int       `json:"accounts_number_fact"`
 	DateTime             time.Time `json:"date_time"`

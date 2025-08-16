@@ -6,6 +6,30 @@ import (
 	"log"
 )
 
+// GetOrdersDefaultURLs возвращает список ссылок, от которых нельзя отписываться
+func (db *DB) GetOrdersDefaultURLs() ([]string, error) {
+	rows, err := db.Conn.Query(`SELECT url_default FROM orders`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var urls []string
+	for rows.Next() {
+		var url sql.NullString
+		if err := rows.Scan(&url); err != nil {
+			return nil, err
+		}
+		if url.Valid {
+			urls = append(urls, url.String)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return urls, nil
+}
+
 // CreateOrder создаёт заказ и распределяет свободные аккаунты
 func (db *DB) CreateOrder(o models.Order) (*models.Order, error) {
 	tx, err := db.Conn.Begin()
