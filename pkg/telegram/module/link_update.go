@@ -70,11 +70,22 @@ func updateAccountLink(db *storage.DB, acc models.Account, link string) error {
 	log.Printf("[LINK_UPDATE] аккаунт %d, установка ссылки '%s'", acc.ID, link)
 	err = client.Run(ctx, func(ctx context.Context) error {
 		api := tg.NewClient(client)
-		// Формируем запрос на обновление описания аккаунта
-		req := tg.AccountUpdateProfileRequest{}
-		req.SetAbout(link)
-		_, err := api.AccountUpdateProfile(ctx, &req)
-		return err
+		// Сначала очищаем текущее описание, чтобы гарантированно заменить его
+		reqClear := tg.AccountUpdateProfileRequest{}
+		reqClear.SetAbout("")
+		if _, err := api.AccountUpdateProfile(ctx, &reqClear); err != nil {
+			return err
+		}
+
+		// Если требуется поставить ссылку, делаем второй запрос
+		if link != "" {
+			reqSet := tg.AccountUpdateProfileRequest{}
+			reqSet.SetAbout(link)
+			if _, err := api.AccountUpdateProfile(ctx, &reqSet); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		log.Printf("[LINK_UPDATE ERROR] аккаунт %d: %v", acc.ID, err)
