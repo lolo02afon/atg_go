@@ -59,9 +59,10 @@ func updateAccountLink(db *storage.DB, acc models.Account, link string) error {
 
 	return client.Run(ctx, func(ctx context.Context) error {
 		api := tg.NewClient(client)
-		// Используем переменную, чтобы получить указатель на строку
-		about := link
-		_, err := api.AccountUpdateProfile(ctx, &tg.AccountUpdateProfileRequest{About: &about})
+		// Формируем запрос на обновление описания аккаунта
+		req := tg.AccountUpdateProfileRequest{}
+		req.SetAbout(link)
+		_, err := api.AccountUpdateProfile(ctx, &req)
 		return err
 	})
 }
