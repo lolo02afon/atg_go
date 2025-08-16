@@ -32,13 +32,13 @@ func Modf_OrderLinkUpdate(db *storage.DB) error {
 	for _, acc := range accounts {
 		var link string
 		if acc.OrderID != nil {
-			// Получаем URL заказа для подстановки в описание
+			// Получаем ссылку по умолчанию из заказа для подстановки в описание
 			order, err := db.GetOrderByID(*acc.OrderID)
 			if err != nil {
 				log.Printf("[LINK_UPDATE ERROR] заказ %d: %v", *acc.OrderID, err)
 				continue
 			}
-			link = order.URL
+			link = order.URLDefault
 		}
 		if err := updateAccountLink(db, acc, link); err != nil {
 			log.Printf("[LINK_UPDATE ERROR] аккаунт %d: %v", acc.ID, err)

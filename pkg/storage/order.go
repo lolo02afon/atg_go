@@ -14,10 +14,10 @@ func (db *DB) CreateOrder(o models.Order) (*models.Order, error) {
 	}
 	defer tx.Rollback()
 
-	// Вставляем запись о заказе
+	// Вставляем запись о заказе вместе со ссылкой по умолчанию
 	err = tx.QueryRow(
-		`INSERT INTO orders (name, url, accounts_number_theory) VALUES ($1, $2, $3) RETURNING id, accounts_number_fact, date_time`,
-		o.Name, o.URL, o.AccountsNumberTheory,
+		`INSERT INTO orders (name, url_description, url_default, accounts_number_theory) VALUES ($1, $2, $3, $4) RETURNING id, accounts_number_fact, date_time`,
+		o.Name, o.URLDescription, o.URLDefault, o.AccountsNumberTheory, // передаём текст и ссылку по умолчанию
 	).Scan(&o.ID, &o.AccountsNumberFact, &o.DateTime)
 	if err != nil {
 		return nil, err
@@ -63,9 +63,9 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 
 	var o models.Order
 	err = tx.QueryRow(
-		`SELECT id, name, url, accounts_number_theory, accounts_number_fact, date_time FROM orders WHERE id = $1`,
+		`SELECT id, name, url_description, url_default, accounts_number_theory, accounts_number_fact, date_time FROM orders WHERE id = $1`,
 		orderID,
-	).Scan(&o.ID, &o.Name, &o.URL, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.DateTime)
+	).Scan(&o.ID, &o.Name, &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.DateTime) // читаем текст и ссылку по умолчанию
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, err
@@ -149,9 +149,9 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 func (db *DB) GetOrderByID(id int) (*models.Order, error) {
 	var o models.Order
 	err := db.Conn.QueryRow(
-		`SELECT id, name, url, accounts_number_theory, accounts_number_fact, date_time FROM orders WHERE id = $1`,
+		`SELECT id, name, url_description, url_default, accounts_number_theory, accounts_number_fact, date_time FROM orders WHERE id = $1`,
 		id,
-	).Scan(&o.ID, &o.Name, &o.URL, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.DateTime)
+	).Scan(&o.ID, &o.Name, &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.DateTime) // читаем текст и ссылку по умолчанию
 	if err != nil {
 		return nil, err
 	}
