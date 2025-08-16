@@ -16,14 +16,12 @@ import (
 // Если order_id есть, в описание ставится ссылка из соответствующего заказа,
 // иначе описание очищается. Комментарии на русском языке по требованию пользователя.
 func Modf_OrderLinkUpdate(db *storage.DB) error {
-	log.Printf("[LINK_UPDATE] старт назначения свободных аккаунтов")
-	// Сначала распределяем свободные аккаунты по заказам
+	// Перед обновлением описаний синхронизируем количество аккаунтов в заказах
 	if err := db.AssignFreeAccountsToOrders(); err != nil {
 		log.Printf("[LINK_UPDATE ERROR] назначение аккаунтов: %v", err)
 		return err
 	}
 
-	log.Printf("[LINK_UPDATE] получение авторизованных аккаунтов")
 	// Получаем все авторизованные аккаунты
 	accounts, err := db.GetAuthorizedAccounts()
 	if err != nil {
@@ -34,19 +32,18 @@ func Modf_OrderLinkUpdate(db *storage.DB) error {
 	for _, acc := range accounts {
 		var link string
 		if acc.OrderID != nil {
-			// Получаем URL заказа
+			// Получаем URL заказа для подстановки в описание
 			order, err := db.GetOrderByID(*acc.OrderID)
 			if err != nil {
-				log.Printf("[LINK_UPDATE WARN] не удалось получить заказ %d: %v", *acc.OrderID, err)
+				log.Printf("[LINK_UPDATE ERROR] заказ %d: %v", *acc.OrderID, err)
 				continue
 			}
 			link = order.URL
 		}
 		if err := updateAccountLink(db, acc, link); err != nil {
-			log.Printf("[LINK_UPDATE WARN] аккаунт %d: %v", acc.ID, err)
+			log.Printf("[LINK_UPDATE ERROR] аккаунт %d: %v", acc.ID, err)
 		}
 	}
-	log.Printf("[LINK_UPDATE] обновление описаний завершено")
 	return nil
 }
 
@@ -67,8 +64,7 @@ func updateAccountLink(db *storage.DB, acc models.Account, link string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	log.Printf("[LINK_UPDATE] аккаунт %d, установка ссылки '%s'", acc.ID, link)
-	err = client.Run(ctx, func(ctx context.Context) error {
+	return client.Run(ctx, func(ctx context.Context) error {
 		api := tg.NewClient(client)
 		// Сначала очищаем текущее описание, чтобы гарантированно заменить его
 		reqClear := tg.AccountUpdateProfileRequest{}
@@ -87,10 +83,4 @@ func updateAccountLink(db *storage.DB, acc models.Account, link string) error {
 		}
 		return nil
 	})
-	if err != nil {
-		log.Printf("[LINK_UPDATE ERROR] аккаунт %d: %v", acc.ID, err)
-		return err
-	}
-	log.Printf("[LINK_UPDATE] аккаунт %d обновлён", acc.ID)
-	return nil
 }

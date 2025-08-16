@@ -50,7 +50,6 @@ func (db *DB) CreateOrder(o models.Order) (*models.Order, error) {
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	log.Printf("[DB INFO] Создан заказ %d, аккаунтов назначено: %d", o.ID, o.AccountsNumberFact)
 	return &o, nil
 }
 
@@ -142,7 +141,6 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	log.Printf("[DB INFO] Заказ %d обновлён, фактических аккаунтов: %d", o.ID, o.AccountsNumberFact)
 	return &o, nil
 }
 
@@ -160,11 +158,9 @@ func (db *DB) GetOrderByID(id int) (*models.Order, error) {
 	return &o, nil
 }
 
-// AssignFreeAccountsToOrders назначает свободные аккаунты заказам,
-// у которых фактическое количество аккаунтов меньше требуемого.
-// Комментарии на русском языке по требованию пользователя.
+// AssignFreeAccountsToOrders синхронизирует аккаунты в заказах согласно требуемому количеству.
+// Для каждого заказа добавляются недостающие аккаунты или освобождаются лишние.
 func (db *DB) AssignFreeAccountsToOrders() error {
-	log.Printf("[DB] старт распределения свободных аккаунтов")
 	tx, err := db.Conn.Begin()
 	if err != nil {
 		log.Printf("[DB ERROR] начало транзакции: %v", err)
@@ -172,17 +168,13 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 	}
 	defer tx.Rollback()
 
-	// Ищем заказы, где не хватает исполнителей
-	rows, err := tx.Query(
-		`SELECT id, accounts_number_theory, accounts_number_fact FROM orders WHERE accounts_number_fact < accounts_number_theory`,
-	)
+	// Получаем все заказы и считаем разницу между требуемым и фактическим количеством аккаунтов
+	rows, err := tx.Query(`SELECT id, accounts_number_theory, accounts_number_fact FROM orders`)
 	if err != nil {
 		log.Printf("[DB ERROR] выборка заказов: %v", err)
 		return err
 	}
 
-	// Сначала собираем данные о нуждающихся в аккаунтах заказах,
-	// чтобы не выполнять другие запросы, пока курсор не закрыт
 	type need struct {
 		id   int
 		diff int
@@ -199,61 +191,94 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 			log.Printf("[DB ERROR] чтение заказа: %v", err)
 			return err
 		}
-		needs = append(needs, need{id: id, diff: theory - fact})
+		if theory != fact {
+			needs = append(needs, need{id: id, diff: theory - fact})
+		}
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
 		log.Printf("[DB ERROR] курсор заказов: %v", err)
 		return err
 	}
-	// Теперь можно закрыть курсор, чтобы освободить соединение
 	rows.Close()
 
-	// Для каждого заказа выделяем свободные аккаунты
 	for _, n := range needs {
-		accRows, err := tx.Query(
-			`SELECT id FROM accounts WHERE order_id IS NULL AND is_authorized = TRUE ORDER BY RANDOM() LIMIT $1`,
-			n.diff,
-		)
-		if err != nil {
-			log.Printf("[DB ERROR] выборка аккаунтов для заказа %d: %v", n.id, err)
-			return err
-		}
+		if n.diff > 0 {
+			// Подбираем свободные аккаунты
+			accRows, err := tx.Query(
+				`SELECT id FROM accounts WHERE order_id IS NULL AND is_authorized = TRUE ORDER BY RANDOM() LIMIT $1`,
+				n.diff,
+			)
+			if err != nil {
+				log.Printf("[DB ERROR] выборка аккаунтов для заказа %d: %v", n.id, err)
+				return err
+			}
 
-		// Сначала собираем идентификаторы свободных аккаунтов в срез
-		var accIDs []int
-		for accRows.Next() {
-			var accID int
-			if err := accRows.Scan(&accID); err != nil {
+			var accIDs []int
+			for accRows.Next() {
+				var accID int
+				if err := accRows.Scan(&accID); err != nil {
+					accRows.Close()
+					log.Printf("[DB ERROR] чтение аккаунта для заказа %d: %v", n.id, err)
+					return err
+				}
+				accIDs = append(accIDs, accID)
+			}
+			if err := accRows.Err(); err != nil {
 				accRows.Close()
-				log.Printf("[DB ERROR] чтение аккаунта для заказа %d: %v", n.id, err)
+				log.Printf("[DB ERROR] курсор аккаунтов для заказа %d: %v", n.id, err)
 				return err
 			}
-			accIDs = append(accIDs, accID)
-		}
-		if err := accRows.Err(); err != nil {
 			accRows.Close()
-			log.Printf("[DB ERROR] курсор аккаунтов для заказа %d: %v", n.id, err)
-			return err
-		}
-		// Курсор больше не нужен, закрываем перед выполнением обновлений
-		accRows.Close()
 
-		// Теперь обновляем аккаунты, назначая им order_id
-		for _, accID := range accIDs {
-			if _, err := tx.Exec(`UPDATE accounts SET order_id = $1 WHERE id = $2`, n.id, accID); err != nil {
-				log.Printf("[DB ERROR] обновление аккаунта %d: %v", accID, err)
+			for _, accID := range accIDs {
+				if _, err := tx.Exec(`UPDATE accounts SET order_id = $1 WHERE id = $2`, n.id, accID); err != nil {
+					log.Printf("[DB ERROR] обновление аккаунта %d: %v", accID, err)
+					return err
+				}
+			}
+		} else if n.diff < 0 {
+			// Освобождаем лишние аккаунты
+			needRelease := -n.diff
+			accRows, err := tx.Query(
+				`SELECT id FROM accounts WHERE order_id = $1 ORDER BY RANDOM() LIMIT $2`,
+				n.id, needRelease,
+			)
+			if err != nil {
+				log.Printf("[DB ERROR] выборка аккаунтов для освобождения заказа %d: %v", n.id, err)
 				return err
 			}
+
+			var accIDs []int
+			for accRows.Next() {
+				var accID int
+				if err := accRows.Scan(&accID); err != nil {
+					accRows.Close()
+					log.Printf("[DB ERROR] чтение аккаунта для освобождения заказа %d: %v", n.id, err)
+					return err
+				}
+				accIDs = append(accIDs, accID)
+			}
+			if err := accRows.Err(); err != nil {
+				accRows.Close()
+				log.Printf("[DB ERROR] курсор аккаунтов для освобождения заказа %d: %v", n.id, err)
+				return err
+			}
+			accRows.Close()
+
+			for _, accID := range accIDs {
+				if _, err := tx.Exec(`UPDATE accounts SET order_id = NULL WHERE id = $1`, accID); err != nil {
+					log.Printf("[DB ERROR] обновление аккаунта %d: %v", accID, err)
+					return err
+				}
+			}
 		}
-		log.Printf("[DB INFO] Заказ %d, добавлено аккаунтов: %d", n.id, len(accIDs))
 	}
 
 	if err := tx.Commit(); err != nil {
 		log.Printf("[DB ERROR] коммит транзакции: %v", err)
 		return err
 	}
-	log.Printf("[DB] распределение аккаунтов завершено")
 	return nil
 }
 
@@ -263,6 +288,5 @@ func (db *DB) DeleteOrder(id int) error {
 	if _, err := db.Conn.Exec(`DELETE FROM orders WHERE id = $1`, id); err != nil {
 		return err
 	}
-	log.Printf("[DB INFO] Заказ %d удалён", id)
 	return nil
 }
