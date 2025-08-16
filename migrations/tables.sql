@@ -81,12 +81,3 @@ CREATE TABLE IF NOT EXISTS account_session (
     data_json TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS statistics (
-    id SERIAL PRIMARY KEY,
-    stat_date DATE NOT NULL UNIQUE,             -- Дата, за которую рассчитана статистика (по времени Москвы)
-    comment_mean DOUBLE PRECISION NOT NULL,
-    reaction_mean DOUBLE PRECISION NOT NULL,
-    account_floodban INTEGER NOT NULL,
-    account_all INTEGER NOT NULL
-);
-
