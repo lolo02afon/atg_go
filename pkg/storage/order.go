@@ -256,3 +256,13 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 	log.Printf("[DB] распределение аккаунтов завершено")
 	return nil
 }
+
+// DeleteOrder удаляет заказ по идентификатору
+// При удалении благодаря ON DELETE SET NULL у связанных аккаунтов очищается поле order_id
+func (db *DB) DeleteOrder(id int) error {
+	if _, err := db.Conn.Exec(`DELETE FROM orders WHERE id = $1`, id); err != nil {
+		return err
+	}
+	log.Printf("[DB INFO] Заказ %d удалён", id)
+	return nil
+}

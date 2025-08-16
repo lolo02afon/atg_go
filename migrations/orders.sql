@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS orders (
 
 -- Добавление поля order_id в таблицу accounts
 ALTER TABLE accounts
-    ADD COLUMN IF NOT EXISTS order_id INTEGER REFERENCES orders(id);
+    ADD COLUMN IF NOT EXISTS order_id INTEGER REFERENCES orders(id) ON DELETE SET NULL;
 
 -- Функция для автоматического обновления количества фактических аккаунтов
 CREATE OR REPLACE FUNCTION update_order_accounts_number() RETURNS TRIGGER AS $$

@@ -58,3 +58,14 @@ func (h *Handler) UpdateAccountsNumber(c *gin.Context) {
 	}
 	c.JSON(200, updated)
 }
+
+// DeleteOrder удаляет заказ и освобождает связанные аккаунты
+func (h *Handler) DeleteOrder(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	if err := h.DB.DeleteOrder(id); err != nil {
+		log.Printf("[ERROR] не удалось удалить заказ: %v", err)
+		c.JSON(500, gin.H{"error": "db error"})
+		return
+	}
+	c.JSON(200, gin.H{"status": "deleted"})
+}
