@@ -304,6 +304,10 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 			}
 		}
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("[DB ERROR] курсор заказов: %v", err)
+		return err
+	}
 
 	if err := tx.Commit(); err != nil {
 		log.Printf("[DB ERROR] коммит транзакции: %v", err)
