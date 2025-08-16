@@ -164,8 +164,10 @@ func (db *DB) GetOrderByID(id int) (*models.Order, error) {
 // у которых фактическое количество аккаунтов меньше требуемого.
 // Комментарии на русском языке по требованию пользователя.
 func (db *DB) AssignFreeAccountsToOrders() error {
+	log.Printf("[DB] старт распределения свободных аккаунтов")
 	tx, err := db.Conn.Begin()
 	if err != nil {
+		log.Printf("[DB ERROR] начало транзакции: %v", err)
 		return err
 	}
 	defer tx.Rollback()
@@ -175,6 +177,7 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 		`SELECT id, accounts_number_theory, accounts_number_fact FROM orders WHERE accounts_number_fact < accounts_number_theory`,
 	)
 	if err != nil {
+		log.Printf("[DB ERROR] выборка заказов: %v", err)
 		return err
 	}
 
@@ -193,12 +196,14 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 		)
 		if err := rows.Scan(&id, &theory, &fact); err != nil {
 			rows.Close()
+			log.Printf("[DB ERROR] чтение заказа: %v", err)
 			return err
 		}
 		needs = append(needs, need{id: id, diff: theory - fact})
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
+		log.Printf("[DB ERROR] курсор заказов: %v", err)
 		return err
 	}
 	// Теперь можно закрыть курсор, чтобы освободить соединение
@@ -211,6 +216,7 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 			n.diff,
 		)
 		if err != nil {
+			log.Printf("[DB ERROR] выборка аккаунтов для заказа %d: %v", n.id, err)
 			return err
 		}
 
@@ -220,12 +226,14 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 			var accID int
 			if err := accRows.Scan(&accID); err != nil {
 				accRows.Close()
+				log.Printf("[DB ERROR] чтение аккаунта для заказа %d: %v", n.id, err)
 				return err
 			}
 			accIDs = append(accIDs, accID)
 		}
 		if err := accRows.Err(); err != nil {
 			accRows.Close()
+			log.Printf("[DB ERROR] курсор аккаунтов для заказа %d: %v", n.id, err)
 			return err
 		}
 		// Курсор больше не нужен, закрываем перед выполнением обновлений
@@ -234,11 +242,17 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 		// Теперь обновляем аккаунты, назначая им order_id
 		for _, accID := range accIDs {
 			if _, err := tx.Exec(`UPDATE accounts SET order_id = $1 WHERE id = $2`, n.id, accID); err != nil {
+				log.Printf("[DB ERROR] обновление аккаунта %d: %v", accID, err)
 				return err
 			}
 		}
 		log.Printf("[DB INFO] Заказ %d, добавлено аккаунтов: %d", n.id, len(accIDs))
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		log.Printf("[DB ERROR] коммит транзакции: %v", err)
+		return err
+	}
+	log.Printf("[DB] распределение аккаунтов завершено")
+	return nil
 }
