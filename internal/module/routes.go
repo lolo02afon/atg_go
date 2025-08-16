@@ -12,4 +12,5 @@ func SetupRoutes(r *gin.RouterGroup, db *storage.DB) {
 	r.POST("/dispatcher_activity", handler.DispatcherActivity)
 	r.POST("/dispatcher_activity/cancel_all", handler.CancelAllDispatcherActivity)
 	r.POST("/unsubscribe", handler.Unsubscribe)
+	r.POST("/order/link_updat", handler.OrderLinkUpdate)
 }
