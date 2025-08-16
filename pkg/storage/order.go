@@ -127,3 +127,17 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 	log.Printf("[DB INFO] Заказ %d обновлён, фактических аккаунтов: %d", o.ID, o.AccountsNumberFact)
 	return &o, nil
 }
+
+// GetOrderByID возвращает заказ по его идентификатору
+// Используется для получения ссылки при обновлении описаний аккаунтов
+func (db *DB) GetOrderByID(id int) (*models.Order, error) {
+	var o models.Order
+	err := db.Conn.QueryRow(
+		`SELECT id, name, url, accounts_number_theory, accounts_number_fact, date_time FROM orders WHERE id = $1`,
+		id,
+	).Scan(&o.ID, &o.Name, &o.URL, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.DateTime)
+	if err != nil {
+		return nil, err
+	}
+	return &o, nil
+}
