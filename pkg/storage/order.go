@@ -174,105 +174,121 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 		log.Printf("[DB ERROR] выборка заказов: %v", err)
 		return err
 	}
+	defer rows.Close()
 
-	type need struct {
-		id   int
-		diff int
-	}
-	var needs []need
 	for rows.Next() {
 		var (
-			id     int
-			theory int
-			fact   int
+			orderID int
+			theory  int
+			fact    int
 		)
-		if err := rows.Scan(&id, &theory, &fact); err != nil {
-			rows.Close()
+		if err := rows.Scan(&orderID, &theory, &fact); err != nil {
 			log.Printf("[DB ERROR] чтение заказа: %v", err)
 			return err
 		}
-		if theory != fact {
-			needs = append(needs, need{id: id, diff: theory - fact})
+
+		// Считаем реальное количество аккаунтов, закреплённых за заказом
+		var actual int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM accounts WHERE order_id = $1`, orderID).Scan(&actual); err != nil {
+			log.Printf("[DB ERROR] подсчёт аккаунтов заказа %d: %v", orderID, err)
+			return err
+		}
+
+		// Если сохранённое значение не совпадает с реальным, обновляем accounts_number_fact
+		if fact != actual {
+			if _, err := tx.Exec(`UPDATE orders SET accounts_number_fact = $1 WHERE id = $2`, actual, orderID); err != nil {
+				log.Printf("[DB ERROR] обновление фактического количества для заказа %d: %v", orderID, err)
+				return err
+			}
+			fact = actual
+		}
+
+		// Если желаемое количество не совпадает с фактическим, корректируем аккаунты
+		if theory != actual {
+			if theory > actual {
+				// Нужно добавить недостающие аккаунты
+				need := theory - actual
+				accRows, err := tx.Query(
+					`SELECT id FROM accounts WHERE order_id IS NULL AND is_authorized = TRUE ORDER BY RANDOM() LIMIT $1`,
+					need,
+				)
+				if err != nil {
+					log.Printf("[DB ERROR] выборка аккаунтов для заказа %d: %v", orderID, err)
+					return err
+				}
+
+				var accIDs []int
+				for accRows.Next() {
+					var accID int
+					if err := accRows.Scan(&accID); err != nil {
+						accRows.Close()
+						log.Printf("[DB ERROR] чтение аккаунта для заказа %d: %v", orderID, err)
+						return err
+					}
+					accIDs = append(accIDs, accID)
+				}
+				if err := accRows.Err(); err != nil {
+					accRows.Close()
+					log.Printf("[DB ERROR] курсор аккаунтов для заказа %d: %v", orderID, err)
+					return err
+				}
+				accRows.Close()
+
+				for _, accID := range accIDs {
+					if _, err := tx.Exec(`UPDATE accounts SET order_id = $1 WHERE id = $2`, orderID, accID); err != nil {
+						log.Printf("[DB ERROR] обновление аккаунта %d: %v", accID, err)
+						return err
+					}
+				}
+				actual += len(accIDs)
+			} else {
+				// Нужно освободить лишние аккаунты
+				needRelease := actual - theory
+				accRows, err := tx.Query(
+					`SELECT id FROM accounts WHERE order_id = $1 ORDER BY RANDOM() LIMIT $2`,
+					orderID, needRelease,
+				)
+				if err != nil {
+					log.Printf("[DB ERROR] выборка аккаунтов для освобождения заказа %d: %v", orderID, err)
+					return err
+				}
+
+				var accIDs []int
+				for accRows.Next() {
+					var accID int
+					if err := accRows.Scan(&accID); err != nil {
+						accRows.Close()
+						log.Printf("[DB ERROR] чтение аккаунта для освобождения заказа %d: %v", orderID, err)
+						return err
+					}
+					accIDs = append(accIDs, accID)
+				}
+				if err := accRows.Err(); err != nil {
+					accRows.Close()
+					log.Printf("[DB ERROR] курсор аккаунтов для освобождения заказа %d: %v", orderID, err)
+					return err
+				}
+				accRows.Close()
+
+				for _, accID := range accIDs {
+					if _, err := tx.Exec(`UPDATE accounts SET order_id = NULL WHERE id = $1`, accID); err != nil {
+						log.Printf("[DB ERROR] обновление аккаунта %d: %v", accID, err)
+						return err
+					}
+				}
+				actual -= len(accIDs)
+			}
+
+			// После изменений фиксируем фактическое количество аккаунтов
+			if _, err := tx.Exec(`UPDATE orders SET accounts_number_fact = $1 WHERE id = $2`, actual, orderID); err != nil {
+				log.Printf("[DB ERROR] обновление фактического количества для заказа %d: %v", orderID, err)
+				return err
+			}
 		}
 	}
 	if err := rows.Err(); err != nil {
-		rows.Close()
 		log.Printf("[DB ERROR] курсор заказов: %v", err)
 		return err
-	}
-	rows.Close()
-
-	for _, n := range needs {
-		if n.diff > 0 {
-			// Подбираем свободные аккаунты
-			accRows, err := tx.Query(
-				`SELECT id FROM accounts WHERE order_id IS NULL AND is_authorized = TRUE ORDER BY RANDOM() LIMIT $1`,
-				n.diff,
-			)
-			if err != nil {
-				log.Printf("[DB ERROR] выборка аккаунтов для заказа %d: %v", n.id, err)
-				return err
-			}
-
-			var accIDs []int
-			for accRows.Next() {
-				var accID int
-				if err := accRows.Scan(&accID); err != nil {
-					accRows.Close()
-					log.Printf("[DB ERROR] чтение аккаунта для заказа %d: %v", n.id, err)
-					return err
-				}
-				accIDs = append(accIDs, accID)
-			}
-			if err := accRows.Err(); err != nil {
-				accRows.Close()
-				log.Printf("[DB ERROR] курсор аккаунтов для заказа %d: %v", n.id, err)
-				return err
-			}
-			accRows.Close()
-
-			for _, accID := range accIDs {
-				if _, err := tx.Exec(`UPDATE accounts SET order_id = $1 WHERE id = $2`, n.id, accID); err != nil {
-					log.Printf("[DB ERROR] обновление аккаунта %d: %v", accID, err)
-					return err
-				}
-			}
-		} else if n.diff < 0 {
-			// Освобождаем лишние аккаунты
-			needRelease := -n.diff
-			accRows, err := tx.Query(
-				`SELECT id FROM accounts WHERE order_id = $1 ORDER BY RANDOM() LIMIT $2`,
-				n.id, needRelease,
-			)
-			if err != nil {
-				log.Printf("[DB ERROR] выборка аккаунтов для освобождения заказа %d: %v", n.id, err)
-				return err
-			}
-
-			var accIDs []int
-			for accRows.Next() {
-				var accID int
-				if err := accRows.Scan(&accID); err != nil {
-					accRows.Close()
-					log.Printf("[DB ERROR] чтение аккаунта для освобождения заказа %d: %v", n.id, err)
-					return err
-				}
-				accIDs = append(accIDs, accID)
-			}
-			if err := accRows.Err(); err != nil {
-				accRows.Close()
-				log.Printf("[DB ERROR] курсор аккаунтов для освобождения заказа %d: %v", n.id, err)
-				return err
-			}
-			accRows.Close()
-
-			for _, accID := range accIDs {
-				if _, err := tx.Exec(`UPDATE accounts SET order_id = NULL WHERE id = $1`, accID); err != nil {
-					log.Printf("[DB ERROR] обновление аккаунта %d: %v", accID, err)
-					return err
-				}
-			}
-		}
 	}
 
 	if err := tx.Commit(); err != nil {
