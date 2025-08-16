@@ -5,6 +5,7 @@ import (
 	"atg_go/internal/comments"
 	"atg_go/internal/middleware"
 	module "atg_go/internal/module"
+	orders "atg_go/internal/order"
 	reaction "atg_go/internal/reaction"
 	statistics "atg_go/internal/statistics"
 	"atg_go/pkg/storage"
@@ -77,6 +78,10 @@ func setupRouter(db *storage.DB, commentDB *storage.CommentDB) *gin.Engine {
 	// Группа роутов для telegram-модуля
 	moduleGroup := r.Group("/module")
 	module.SetupRoutes(moduleGroup, db)
+
+	// Группа роутов для заказов
+	orderGroup := r.Group("/order")
+	orders.SetupRoutes(orderGroup, db)
 
 	// Группа роутов для статистики
 	statsGroup := r.Group("/statistics")

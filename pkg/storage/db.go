@@ -95,7 +95,7 @@ func (db *DB) GetAccountByID(id int) (*models.Account, error) {
 	)
 
 	query := `
-              SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.proxy_id,
+              SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.proxy_id, a.order_id,
                      p.id, p.ip, p.port, p.login, p.password, p.ipv6, p.account_count, p.is_active
               FROM accounts a
               LEFT JOIN proxy p ON a.proxy_id = p.id
@@ -109,6 +109,7 @@ func (db *DB) GetAccountByID(id int) (*models.Account, error) {
 		&account.PhoneCodeHash,
 		&account.IsAuthorized,
 		&account.ProxyID,
+		&account.OrderID,
 		&proxyID,
 		&proxyIP,
 		&proxyPort,
@@ -183,7 +184,7 @@ func (db *DB) GetAccountByPhone(phone string) (*models.Account, error) {
 	)
 
 	query := `
-       SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.proxy_id,
+       SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.proxy_id, a.order_id,
               p.id, p.ip, p.port, p.login, p.password, p.ipv6, p.account_count, p.is_active
        FROM accounts a
        LEFT JOIN proxy p ON a.proxy_id = p.id
@@ -197,6 +198,7 @@ func (db *DB) GetAccountByPhone(phone string) (*models.Account, error) {
 		&account.PhoneCodeHash,
 		&account.IsAuthorized,
 		&account.ProxyID,
+		&account.OrderID,
 		&proxyID,
 		&proxyIP,
 		&proxyPort,
@@ -254,7 +256,7 @@ func (db *DB) AssignProxyToAccount(accountID, proxyID int, limit int) error {
 func (db *DB) GetAuthorizedAccounts() ([]models.Account, error) {
 	// Запрос для выборки авторизованных аккаунтов
 	query := `
-       SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.proxy_id,
+       SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.proxy_id, a.order_id,
               p.id, p.ip, p.port, p.login, p.password, p.ipv6, p.account_count, p.is_active
        FROM accounts a
        LEFT JOIN proxy p ON a.proxy_id = p.id
@@ -286,6 +288,7 @@ func (db *DB) GetAuthorizedAccounts() ([]models.Account, error) {
 			proxyCount     sql.NullInt64
 			proxyIsActive  sql.NullBool
 			accountProxyID sql.NullInt64
+			accountOrderID sql.NullInt64
 		)
 
 		if err := rows.Scan(
@@ -296,6 +299,7 @@ func (db *DB) GetAuthorizedAccounts() ([]models.Account, error) {
 			&account.PhoneCodeHash,
 			&account.IsAuthorized,
 			&accountProxyID,
+			&accountOrderID,
 			&proxyID,
 			&proxyIP,
 			&proxyPort,
@@ -309,10 +313,14 @@ func (db *DB) GetAuthorizedAccounts() ([]models.Account, error) {
 			continue // Пропускаем проблемные записи
 		}
 
-		// Заполняем ID прокси в аккаунте, если он есть
+		// Заполняем ID прокси и заказа в аккаунте, если они есть
 		if accountProxyID.Valid {
 			id := int(accountProxyID.Int64)
 			account.ProxyID = &id
+		}
+		if accountOrderID.Valid {
+			id := int(accountOrderID.Int64)
+			account.OrderID = &id
 		}
 
 		// Если данные по прокси получены, формируем объект прокси
