@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     is_authorized BOOLEAN DEFAULT false,             -- Флаг успешной авторизации
     phone_code_hash TEXT,                            -- Хэш кода подтверждения из Telegram
     floodwait_until TIMESTAMP NULL,                 -- Время окончания флуд-бана (NULL если нет блокировки)
-    proxy_id INTEGER REFERENCES proxy(id)           -- Привязка к прокси
+    proxy_id INTEGER REFERENCES proxy(id)          -- Привязка к прокси
 );
 
 -- Триггер для автоматического обновления account_count
