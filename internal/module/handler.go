@@ -31,10 +31,11 @@ func NewHandler(db *storage.DB) *Handler {
 // Ожидает JSON со списком activity_request, где у каждого запроса есть url и request_body.
 func (h *Handler) DispatcherActivity(c *gin.Context) {
 	var req struct {
-		DaysNumber       int                              `json:"days_number" binding:"required"`
-		ActivityRequest  []telegrammodule.ActivityRequest `json:"activity_request" binding:"required"`
-		ActivityComment  telegrammodule.ActivitySettings  `json:"activity_comment" binding:"required"`
-		ActivityReaction telegrammodule.ActivitySettings  `json:"activity_reaction" binding:"required"`
+		DaysNumber                  int                                `json:"days_number" binding:"required"`
+		ActivityRequest             []telegrammodule.ActivityRequest   `json:"activity_request" binding:"required"`
+		ActivityComment             telegrammodule.ActivitySettings    `json:"activity_comment" binding:"required"`
+		ActivityReaction            telegrammodule.ActivitySettings    `json:"activity_reaction" binding:"required"`
+		ActivityAccountsUnsubscribe telegrammodule.UnsubscribeSettings `json:"activity_accounts_unsubscribe" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -57,7 +58,7 @@ func (h *Handler) DispatcherActivity(c *gin.Context) {
 			delete(h.tasks, taskID)
 			h.mu.Unlock()
 		}()
-		telegrammodule.ModF_DispatcherActivity(ctx, req.DaysNumber, req.ActivityRequest, req.ActivityComment, req.ActivityReaction)
+		telegrammodule.ModF_DispatcherActivity(ctx, req.DaysNumber, req.ActivityRequest, req.ActivityComment, req.ActivityReaction, req.ActivityAccountsUnsubscribe)
 	}(id)
 
 	c.JSON(http.StatusOK, gin.H{"status": "запущено", "task_id": id})

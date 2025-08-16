@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS orders (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     url TEXT NOT NULL,
+    url_description TEXT, -- ссылка, которая будет размещена в описании
+    url_default TEXT,     -- ссылка, от которой нельзя отписываться
     accounts_number_theory INTEGER NOT NULL,
     accounts_number_fact INTEGER NOT NULL DEFAULT 0,
     date_time TIMESTAMP NOT NULL DEFAULT NOW()
