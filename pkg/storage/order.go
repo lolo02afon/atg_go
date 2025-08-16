@@ -141,3 +141,64 @@ func (db *DB) GetOrderByID(id int) (*models.Order, error) {
 	}
 	return &o, nil
 }
+
+// AssignFreeAccountsToOrders назначает свободные аккаунты заказам,
+// у которых фактическое количество аккаунтов меньше требуемого.
+// Комментарии на русском языке по требованию пользователя.
+func (db *DB) AssignFreeAccountsToOrders() error {
+	tx, err := db.Conn.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Ищем заказы, где не хватает исполнителей
+	rows, err := tx.Query(
+		`SELECT id, accounts_number_theory, accounts_number_fact FROM orders WHERE accounts_number_fact < accounts_number_theory`,
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			id     int
+			theory int
+			fact   int
+		)
+		if err := rows.Scan(&id, &theory, &fact); err != nil {
+			return err
+		}
+		diff := theory - fact
+
+		// Выбираем свободные авторизованные аккаунты в случайном порядке
+		accRows, err := tx.Query(
+			`SELECT id FROM accounts WHERE order_id IS NULL AND is_authorized = TRUE ORDER BY RANDOM() LIMIT $1`,
+			diff,
+		)
+		if err != nil {
+			return err
+		}
+
+		assigned := 0
+		for accRows.Next() {
+			var accID int
+			if err := accRows.Scan(&accID); err != nil {
+				accRows.Close()
+				return err
+			}
+			if _, err := tx.Exec(`UPDATE accounts SET order_id = $1 WHERE id = $2`, id, accID); err != nil {
+				accRows.Close()
+				return err
+			}
+			assigned++
+		}
+		accRows.Close()
+		log.Printf("[DB INFO] Заказ %d, добавлено аккаунтов: %d", id, assigned)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	return tx.Commit()
+}

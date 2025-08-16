@@ -16,6 +16,11 @@ import (
 // Если order_id есть, в описание ставится ссылка из соответствующего заказа,
 // иначе описание очищается. Комментарии на русском языке по требованию пользователя.
 func Modf_OrderLinkUpdate(db *storage.DB) error {
+	// Сначала распределяем свободные аккаунты по заказам
+	if err := db.AssignFreeAccountsToOrders(); err != nil {
+		return err
+	}
+
 	// Получаем все авторизованные аккаунты
 	accounts, err := db.GetAuthorizedAccounts()
 	if err != nil {
