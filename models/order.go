@@ -4,7 +4,8 @@ import "time"
 
 // Order описывает заказ на размещение ссылки в описании аккаунтов
 // name - произвольное название заказа
-// url - ссылка на канал
+// url_description - ссылка, которая будет вставлена в описание аккаунта
+// url_default - ссылка по умолчанию, которая хранится в заказе
 // accounts_number_theory - желаемое количество аккаунтов
 // accounts_number_fact - количество фактически задействованных аккаунтов
 // date_time - время создания заказа
@@ -14,9 +15,8 @@ import "time"
 type Order struct {
 	ID                   int       `json:"id"`
 	Name                 string    `json:"name"`
-	URL                  string    `json:"url"`
-	URLDescription       string    `json:"url_description"` // ссылка, размещаемая в описании
-	URLDefault           string    `json:"url_default"`     // ссылку из этого поля нельзя отписывать
+	URLDescription       string    `json:"url_description"` // Текст ссылки для описания
+	URLDefault           string    `json:"url_default"`     // Ссылка по умолчанию
 	AccountsNumberTheory int       `json:"accounts_number_theory"`
 	AccountsNumberFact   int       `json:"accounts_number_fact"`
 	DateTime             time.Time `json:"date_time"`
