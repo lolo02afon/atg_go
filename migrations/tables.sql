@@ -10,6 +10,16 @@ CREATE TABLE IF NOT EXISTS proxy (
     is_active BOOLEAN NULL
 );
 
+-- Таблица заказов на размещение ссылок
+CREATE TABLE IF NOT EXISTS orders (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    accounts_number_theory INTEGER NOT NULL,
+    accounts_number_fact INTEGER NOT NULL DEFAULT 0,
+    date_time TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
 -- Основная таблица аккаунтов Telegram
 CREATE TABLE IF NOT EXISTS accounts (
     id SERIAL PRIMARY KEY,                           -- Уникальный идентификатор аккаунта
@@ -79,14 +89,5 @@ CREATE TABLE IF NOT EXISTS account_session (
     date_time TIMESTAMP NOT NULL DEFAULT NOW(),
     account INTEGER NOT NULL UNIQUE REFERENCES accounts(id) ON DELETE CASCADE,
     data_json TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS statistics (
-    id SERIAL PRIMARY KEY,
-    stat_date DATE NOT NULL UNIQUE,             -- Дата, за которую рассчитана статистика (по времени Москвы)
-    comment_mean DOUBLE PRECISION NOT NULL,
-    reaction_mean DOUBLE PRECISION NOT NULL,
-    account_floodban INTEGER NOT NULL,
-    account_all INTEGER NOT NULL
 );
 
