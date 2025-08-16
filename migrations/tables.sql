@@ -10,6 +10,16 @@ CREATE TABLE IF NOT EXISTS proxy (
     is_active BOOLEAN NULL
 );
 
+-- Таблица заказов на размещение ссылок
+CREATE TABLE IF NOT EXISTS orders (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    accounts_number_theory INTEGER NOT NULL,
+    accounts_number_fact INTEGER NOT NULL DEFAULT 0,
+    date_time TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
 -- Основная таблица аккаунтов Telegram
 CREATE TABLE IF NOT EXISTS accounts (
     id SERIAL PRIMARY KEY,                           -- Уникальный идентификатор аккаунта
@@ -19,7 +29,8 @@ CREATE TABLE IF NOT EXISTS accounts (
     is_authorized BOOLEAN DEFAULT false,             -- Флаг успешной авторизации
     phone_code_hash TEXT,                            -- Хэш кода подтверждения из Telegram
     floodwait_until TIMESTAMP NULL,                 -- Время окончания флуд-бана (NULL если нет блокировки)
-    proxy_id INTEGER REFERENCES proxy(id)           -- Привязка к прокси
+    proxy_id INTEGER REFERENCES proxy(id),          -- Привязка к прокси
+    order_id INTEGER REFERENCES orders(id)          -- Заказ, который сейчас выполняет аккаунт
 );
 
 -- Триггер для автоматического обновления account_count
