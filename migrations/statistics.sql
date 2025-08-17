@@ -3,7 +3,7 @@
 
 -- Создание таблицы со статистикой
 CREATE TABLE IF NOT EXISTS statistics (
-    id SERIAL PRIMARY KEY,                    -- Уникальный идентификатор записи
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- современный автоинкремент
     stat_date DATE NOT NULL UNIQUE,          -- Дата, за которую рассчитана статистика (МСК)
     comment_mean DOUBLE PRECISION NOT NULL,  -- Среднее число комментариев на аккаунт
     reaction_mean DOUBLE PRECISION NOT NULL, -- Среднее число реакций на аккаунт
@@ -70,3 +70,4 @@ BEGIN
     WHERE id = p_account_id;
 END;
 $$ LANGUAGE plpgsql;
+
