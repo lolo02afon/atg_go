@@ -1,12 +1,12 @@
 -- Таблица заказов на размещение ссылок
 CREATE TABLE IF NOT EXISTS orders (
-    id SERIAL PRIMARY KEY,
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- современный автоинкремент
     name TEXT NOT NULL,
     url_description TEXT NOT NULL, -- ссылка для описания аккаунта
     url_default TEXT NOT NULL, -- ссылка по умолчанию
     accounts_number_theory INTEGER NOT NULL,
     accounts_number_fact INTEGER NOT NULL DEFAULT 0,
-    date_time TIMESTAMP NOT NULL DEFAULT NOW()
+    date_time TIMESTAMPTZ NOT NULL DEFAULT NOW() -- сохраняем время с учётом часового пояса
 );
 
 -- Добавление поля order_id в таблицу accounts
@@ -58,3 +58,4 @@ ALTER TABLE accounts
 ALTER TABLE accounts
     ADD CONSTRAINT accounts_order_id_fkey
         FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL; -- При удалении заказа поле обнуляется
+

@@ -1,6 +1,6 @@
 -- Таблица прокси-серверов
 CREATE TABLE IF NOT EXISTS proxy (
-    id SERIAL PRIMARY KEY,
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- современный автоинкремент
     ip TEXT NOT NULL,
     port INTEGER NOT NULL,
     login TEXT,
