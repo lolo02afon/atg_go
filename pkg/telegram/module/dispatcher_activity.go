@@ -197,7 +197,15 @@ func ModF_DispatcherActivity(ctx context.Context, daysNumber int, activities []A
 					currentDay := start.AddDate(0, 0, offset).In(loc)
 					target := time.Date(currentDay.Year(), currentDay.Month(), currentDay.Day(), startTime.Hour(), startTime.Minute(), 0, 0, loc)
 
-					if sleep := target.Sub(time.Now().In(loc)); sleep > 0 {
+					// Текущее время в московском часовом поясе
+					now := time.Now().In(loc)
+					// Если целевое время уже наступило, завершаем горутину, чтобы не запускать отписку немедленно
+					if target.Before(now) {
+						return
+					}
+
+					// Ожидаем наступления целевого времени, если оно ещё не пришло
+					if sleep := target.Sub(now); sleep > 0 {
 						select {
 						case <-time.After(sleep):
 						case <-ctx.Done():
