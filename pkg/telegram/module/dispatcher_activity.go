@@ -36,10 +36,11 @@ type UnsubscribeSettings struct {
 // заданного количества суток и реагирует на отмену контекста.
 func ModF_DispatcherActivity(ctx context.Context, daysNumber int, activities []ActivityRequest, commentCfg, reactionCfg ActivitySettings, unsubscribeCfg UnsubscribeSettings) {
 	rand.Seed(time.Now().UnixNano())
-	start := time.Now()
 
-	// Загружаем часовую зону Москвы для использования в расписании отписки
+	// Загружаем часовую зону Москвы и фиксируем текущее время в ней,
+	// чтобы дальнейшие расчёты опирались на МСК
 	loc, _ := time.LoadLocation("Europe/Moscow")
+	start := time.Now().In(loc)
 
 	for day := 0; day < daysNumber; day++ {
 		select {
@@ -80,7 +81,8 @@ func ModF_DispatcherActivity(ctx context.Context, daysNumber int, activities []A
 					count := rand.Intn(maxAct-minAct+1) + minAct
 
 					currentDay := start.AddDate(0, 0, offset)
-					windowStart := time.Date(currentDay.Year(), currentDay.Month(), currentDay.Day(), startTime.Hour(), startTime.Minute(), 0, 0, time.Local)
+					// Начало окна активности в московском часовом поясе
+					windowStart := time.Date(currentDay.Year(), currentDay.Month(), currentDay.Day(), startTime.Hour(), startTime.Minute(), 0, 0, loc)
 					duration := time.Duration(endMin-startMin) * time.Minute
 					interval := duration / time.Duration(count)
 
@@ -92,7 +94,12 @@ func ModF_DispatcherActivity(ctx context.Context, daysNumber int, activities []A
 						}
 
 						t := windowStart.Add(interval * time.Duration(i))
-						if sleep := time.Until(t); sleep > 0 {
+						now := time.Now().In(loc)
+						// Пропускаем выполнение, если расчётное время уже прошло
+						if t.Before(now) {
+							continue
+						}
+						if sleep := t.Sub(now); sleep > 0 {
 							select {
 							case <-time.After(sleep):
 							case <-ctx.Done():
@@ -136,7 +143,8 @@ func ModF_DispatcherActivity(ctx context.Context, daysNumber int, activities []A
 					count := rand.Intn(maxAct-minAct+1) + minAct
 
 					currentDay := start.AddDate(0, 0, offset)
-					windowStart := time.Date(currentDay.Year(), currentDay.Month(), currentDay.Day(), startTime.Hour(), startTime.Minute(), 0, 0, time.Local)
+					// Начало окна активности в московском часовом поясе
+					windowStart := time.Date(currentDay.Year(), currentDay.Month(), currentDay.Day(), startTime.Hour(), startTime.Minute(), 0, 0, loc)
 					duration := time.Duration(endMin-startMin) * time.Minute
 					interval := duration / time.Duration(count)
 
@@ -148,7 +156,12 @@ func ModF_DispatcherActivity(ctx context.Context, daysNumber int, activities []A
 						}
 
 						t := windowStart.Add(interval * time.Duration(i))
-						if sleep := time.Until(t); sleep > 0 {
+						now := time.Now().In(loc)
+						// Пропускаем выполнение, если расчётное время уже прошло
+						if t.Before(now) {
+							continue
+						}
+						if sleep := t.Sub(now); sleep > 0 {
 							select {
 							case <-time.After(sleep):
 							case <-ctx.Done():
