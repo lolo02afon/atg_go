@@ -2,7 +2,6 @@ package auth
 
 import (
 	"log"
-	"strconv"
 
 	"atg_go/models"
 	"atg_go/pkg/storage"
@@ -65,12 +64,11 @@ func (h *AccountHandler) CreateAccount(c *gin.Context) {
 	}
 
 	log.Printf("[INFO] Аккаунт сохранён в БД с ID=%d", created.ID)
-	// Возвращаем номер кода вместо ID
-	c.JSON(200, gin.H{"code_number": created.ID})
+	// Возвращаем статичное сообщение вместо номера кода
+	c.JSON(200, gin.H{"результат": "готово, теперь нужно подтвердить кодом"})
 }
 
 func (h *AccountHandler) VerifyAccount(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
 	var input struct {
 		Code string `json:"code"`
 	}
@@ -80,9 +78,16 @@ func (h *AccountHandler) VerifyAccount(c *gin.Context) {
 		return
 	}
 
-	account, err := h.DB.GetAccountByID(id)
+	// Получаем последнюю запись аккаунта
+	account, err := h.DB.GetLastAccount()
 	if err != nil {
 		c.JSON(404, gin.H{"error": "Account not found"})
+		return
+	}
+
+	// Если последний аккаунт уже авторизован, сообщаем об этом
+	if account.IsAuthorized {
+		c.JSON(200, gin.H{"результат": "последний аккаунт уже авторизован"})
 		return
 	}
 

@@ -9,5 +9,5 @@ import (
 func SetupRoutes(r *gin.RouterGroup, db *storage.DB) {
 	handler := NewHandler(db)
 	r.POST("/CreateAccount", handler.CreateAccount)
-	r.POST("/CreateAccount/verify/:id/", handler.VerifyAccount)
+	r.POST("/CreateAccount/verify", handler.VerifyAccount)
 }

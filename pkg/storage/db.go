@@ -151,6 +151,82 @@ func (db *DB) GetAccountByID(id int) (*models.Account, error) {
 	return &account, nil
 }
 
+// Возвращает последнюю созданную запись аккаунта
+func (db *DB) GetLastAccount() (*models.Account, error) {
+	var account models.Account
+
+	// Переменные для возможных NULL-значений связанных с прокси
+	var (
+		proxyID       sql.NullInt64
+		proxyIP       sql.NullString
+		proxyPort     sql.NullInt64
+		proxyLogin    sql.NullString
+		proxyPassword sql.NullString
+		proxyIPv6     sql.NullString
+		proxyCount    sql.NullInt64
+		proxyActive   sql.NullBool
+	)
+
+	query := `
+              SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.proxy_id, a.order_id,
+                     p.id, p.ip, p.port, p.login, p.password, p.ipv6, p.account_count, p.is_active
+              FROM accounts a
+              LEFT JOIN proxy p ON a.proxy_id = p.id
+              ORDER BY a.id DESC
+              LIMIT 1
+       `
+
+	// Получаем последнюю запись из таблицы accounts
+	err := db.Conn.QueryRow(query).Scan(
+		&account.ID,
+		&account.Phone,
+		&account.ApiID,
+		&account.ApiHash,
+		&account.PhoneCodeHash,
+		&account.IsAuthorized,
+		&account.ProxyID,
+		&account.OrderID,
+		&proxyID,
+		&proxyIP,
+		&proxyPort,
+		&proxyLogin,
+		&proxyPassword,
+		&proxyIPv6,
+		&proxyCount,
+		&proxyActive,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if proxyID.Valid {
+		account.Proxy = &models.Proxy{ID: int(proxyID.Int64), IsActive: proxyActive}
+		if proxyIP.Valid {
+			account.Proxy.IP = proxyIP.String
+		}
+		if proxyPort.Valid {
+			account.Proxy.Port = int(proxyPort.Int64)
+		}
+		if proxyLogin.Valid {
+			account.Proxy.Login = proxyLogin.String
+		}
+		if proxyPassword.Valid {
+			account.Proxy.Password = proxyPassword.String
+		}
+		if proxyIPv6.Valid {
+			account.Proxy.IPv6 = proxyIPv6.String
+		}
+		if proxyCount.Valid {
+			account.Proxy.AccountsCount = int(proxyCount.Int64)
+		}
+	} else {
+		account.Proxy = nil
+		account.ProxyID = nil
+	}
+
+	return &account, nil
+}
+
 func (db *DB) MarkAccountAsAuthorized(accountID int) error {
 	_, err := db.Conn.Exec(
 		"UPDATE accounts SET is_authorized = true WHERE id = $1",
