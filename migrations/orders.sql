@@ -2,12 +2,17 @@
 CREATE TABLE IF NOT EXISTS orders (
     id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- современный автоинкремент
     name TEXT NOT NULL,
+    category TEXT NOT NULL, -- Название категории (берём из channels.name)
     url_description TEXT NOT NULL, -- ссылка для описания аккаунта
     url_default TEXT NOT NULL, -- ссылка по умолчанию
     accounts_number_theory INTEGER NOT NULL,
     accounts_number_fact INTEGER NOT NULL DEFAULT 0,
     date_time TIMESTAMPTZ NOT NULL DEFAULT NOW() -- сохраняем время с учётом часового пояса
 );
+
+-- Добавляем колонку category, если таблица уже создана
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS category TEXT NOT NULL;
 
 -- Добавление поля order_id в таблицу accounts
 ALTER TABLE accounts

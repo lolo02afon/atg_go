@@ -15,6 +15,7 @@ import "time"
 type Order struct {
 	ID                   int       `json:"id"`
 	Name                 string    `json:"name"`
+	Category             string    `json:"category"`        // Название категории (из таблицы channels)
 	URLDescription       string    `json:"url_description"` // Текст ссылки для описания
 	URLDefault           string    `json:"url_default"`     // Ссылка по умолчанию
 	AccountsNumberTheory int       `json:"accounts_number_theory"`
