@@ -25,6 +25,8 @@ func (h *AccountHandler) CreateAccount(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "Invalid data"})
 		return
 	}
+	// Обнуляем ID, чтобы БД назначила его автоматически
+	account.ID = 0
 
 	var proxy *models.Proxy
 	if account.ProxyID != nil {
@@ -63,7 +65,8 @@ func (h *AccountHandler) CreateAccount(c *gin.Context) {
 	}
 
 	log.Printf("[INFO] Аккаунт сохранён в БД с ID=%d", created.ID)
-	c.JSON(200, gin.H{"id": created.ID})
+	// Возвращаем номер кода вместо ID
+	c.JSON(200, gin.H{"code_number": created.ID})
 }
 
 func (h *AccountHandler) VerifyAccount(c *gin.Context) {
