@@ -57,10 +57,16 @@ func (db *DB) GetProxyByID(id int) (*models.Proxy, error) {
 
 func (db *DB) CreateAccount(account models.Account) (*models.Account, error) {
 	query := `
-               INSERT INTO accounts (phone, api_id, api_hash, phone_code_hash, proxy_id)
-               VALUES ($1, $2, $3, $4, $5)
-               RETURNING id
+              INSERT INTO accounts (phone, api_id, api_hash, phone_code_hash, proxy_id, gender)
+              VALUES ($1, $2, $3, $4, $5, $6)
+              RETURNING id
        `
+
+	// Если пол не указан или задан неверно, используем значение по умолчанию
+	gender := account.Gender
+	if gender != "male" && gender != "female" {
+		gender = "neutral"
+	}
 
 	err := db.Conn.QueryRow(
 		query,
@@ -69,6 +75,7 @@ func (db *DB) CreateAccount(account models.Account) (*models.Account, error) {
 		account.ApiHash,
 		account.PhoneCodeHash,
 		account.ProxyID,
+		gender,
 	).Scan(&account.ID)
 
 	if err != nil {
@@ -95,7 +102,7 @@ func (db *DB) GetAccountByID(id int) (*models.Account, error) {
 	)
 
 	query := `
-              SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.proxy_id, a.order_id,
+              SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.gender, a.proxy_id, a.order_id,
                      p.id, p.ip, p.port, p.login, p.password, p.ipv6, p.account_count, p.is_active
               FROM accounts a
               LEFT JOIN proxy p ON a.proxy_id = p.id
@@ -108,6 +115,7 @@ func (db *DB) GetAccountByID(id int) (*models.Account, error) {
 		&account.ApiHash,
 		&account.PhoneCodeHash,
 		&account.IsAuthorized,
+		&account.Gender,
 		&account.ProxyID,
 		&account.OrderID,
 		&proxyID,
@@ -168,7 +176,7 @@ func (db *DB) GetLastAccount() (*models.Account, error) {
 	)
 
 	query := `
-              SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.proxy_id, a.order_id,
+              SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.gender, a.proxy_id, a.order_id,
                      p.id, p.ip, p.port, p.login, p.password, p.ipv6, p.account_count, p.is_active
               FROM accounts a
               LEFT JOIN proxy p ON a.proxy_id = p.id
@@ -184,6 +192,7 @@ func (db *DB) GetLastAccount() (*models.Account, error) {
 		&account.ApiHash,
 		&account.PhoneCodeHash,
 		&account.IsAuthorized,
+		&account.Gender,
 		&account.ProxyID,
 		&account.OrderID,
 		&proxyID,
@@ -260,7 +269,7 @@ func (db *DB) GetAccountByPhone(phone string) (*models.Account, error) {
 	)
 
 	query := `
-       SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.proxy_id, a.order_id,
+       SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.gender, a.proxy_id, a.order_id,
               p.id, p.ip, p.port, p.login, p.password, p.ipv6, p.account_count, p.is_active
        FROM accounts a
        LEFT JOIN proxy p ON a.proxy_id = p.id
@@ -273,6 +282,7 @@ func (db *DB) GetAccountByPhone(phone string) (*models.Account, error) {
 		&account.ApiHash,
 		&account.PhoneCodeHash,
 		&account.IsAuthorized,
+		&account.Gender,
 		&account.ProxyID,
 		&account.OrderID,
 		&proxyID,
@@ -332,7 +342,7 @@ func (db *DB) AssignProxyToAccount(accountID, proxyID int, limit int) error {
 func (db *DB) GetAuthorizedAccounts() ([]models.Account, error) {
 	// Запрос для выборки авторизованных аккаунтов
 	query := `
-       SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.proxy_id, a.order_id,
+       SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.gender, a.proxy_id, a.order_id,
               p.id, p.ip, p.port, p.login, p.password, p.ipv6, p.account_count, p.is_active
        FROM accounts a
        LEFT JOIN proxy p ON a.proxy_id = p.id
@@ -374,6 +384,7 @@ func (db *DB) GetAuthorizedAccounts() ([]models.Account, error) {
 			&account.ApiHash,
 			&account.PhoneCodeHash,
 			&account.IsAuthorized,
+			&account.Gender,
 			&accountProxyID,
 			&accountOrderID,
 			&proxyID,
