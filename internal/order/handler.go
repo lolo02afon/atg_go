@@ -40,6 +40,16 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 	c.JSON(200, created)
 }
 
+// GetCategories возвращает список доступных категорий из таблицы channels
+func (h *Handler) GetCategories(c *gin.Context) {
+	names, err := h.DB.GetChannelNames()
+	if err != nil {
+		c.JSON(500, gin.H{"error": "db error"})
+		return
+	}
+	c.JSON(200, gin.H{"categories": names})
+}
+
 // UpdateAccountsNumber изменяет количество аккаунтов для заказа
 func (h *Handler) UpdateAccountsNumber(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))

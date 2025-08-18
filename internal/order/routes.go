@@ -12,4 +12,5 @@ func SetupRoutes(r *gin.RouterGroup, db *storage.DB) {
 	r.POST("/CreateOrder", h.CreateOrder)
 	r.POST("/UpdateAccounts/:id", h.UpdateAccountsNumber)
 	r.DELETE("/DeleteOrder/:id", h.DeleteOrder)
+	r.GET("/OrderCategories", h.GetCategories) // Возвращаем список категорий для выпадающего списка
 }

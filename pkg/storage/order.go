@@ -3,6 +3,7 @@ package storage
 import (
 	"atg_go/models"
 	"database/sql"
+	"fmt"
 	"log"
 )
 
@@ -38,10 +39,19 @@ func (db *DB) CreateOrder(o models.Order) (*models.Order, error) {
 	}
 	defer tx.Rollback()
 
+	// Проверяем, что указанная категория существует в таблице channels
+	var exists bool
+	if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM channels WHERE name = $1)`, o.Category).Scan(&exists); err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, fmt.Errorf("категория '%s' не найдена", o.Category)
+	}
+
 	// Вставляем запись о заказе вместе со ссылкой по умолчанию
 	err = tx.QueryRow(
-		`INSERT INTO orders (name, url_description, url_default, accounts_number_theory) VALUES ($1, $2, $3, $4) RETURNING id, accounts_number_fact, date_time`,
-		o.Name, o.URLDescription, o.URLDefault, o.AccountsNumberTheory, // передаём текст и ссылку по умолчанию
+		`INSERT INTO orders (name, category, url_description, url_default, accounts_number_theory) VALUES ($1, $2, $3, $4, $5) RETURNING id, accounts_number_fact, date_time`,
+		o.Name, o.Category, o.URLDescription, o.URLDefault, o.AccountsNumberTheory, // передаём текст, категорию и ссылку по умолчанию
 	).Scan(&o.ID, &o.AccountsNumberFact, &o.DateTime)
 	if err != nil {
 		return nil, err
@@ -87,9 +97,9 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 
 	var o models.Order
 	err = tx.QueryRow(
-		`SELECT id, name, url_description, url_default, accounts_number_theory, accounts_number_fact, date_time FROM orders WHERE id = $1`,
+		`SELECT id, name, category, url_description, url_default, accounts_number_theory, accounts_number_fact, date_time FROM orders WHERE id = $1`,
 		orderID,
-	).Scan(&o.ID, &o.Name, &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.DateTime) // читаем текст и ссылку по умолчанию
+	).Scan(&o.ID, &o.Name, &o.Category, &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.DateTime) // читаем текст, категорию и ссылку по умолчанию
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, err
@@ -173,9 +183,9 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 func (db *DB) GetOrderByID(id int) (*models.Order, error) {
 	var o models.Order
 	err := db.Conn.QueryRow(
-		`SELECT id, name, url_description, url_default, accounts_number_theory, accounts_number_fact, date_time FROM orders WHERE id = $1`,
+		`SELECT id, name, category, url_description, url_default, accounts_number_theory, accounts_number_fact, date_time FROM orders WHERE id = $1`,
 		id,
-	).Scan(&o.ID, &o.Name, &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.DateTime) // читаем текст и ссылку по умолчанию
+	).Scan(&o.ID, &o.Name, &o.Category, &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.DateTime) // читаем текст, категорию и ссылку по умолчанию
 	if err != nil {
 		return nil, err
 	}
