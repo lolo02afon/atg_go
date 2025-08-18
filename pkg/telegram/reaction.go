@@ -67,17 +67,17 @@ func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID
 		channelID = int(channel.ID)
 
 		// Пытаемся вступить в канал, чтобы иметь доступ к обсуждению
-		if errJoin := module.Modf_JoinChannel(ctx, api, channel); errJoin != nil {
+		if errJoin := module.Modf_JoinChannel(ctx, api, channel, db, accountID); errJoin != nil {
 			log.Printf("[ERROR] Не удалось вступить в канал: ID=%d Ошибка=%v", channel.ID, errJoin)
 		}
 
 		// Получаем чат обсуждения, не завязанный на конкретный пост
-		discussionChat, err := module.Modf_getDiscussionChat(ctx, api, channel)
+		discussionChat, err := module.Modf_getDiscussionChat(ctx, api, channel, db, accountID)
 		if err != nil {
 			return fmt.Errorf("не удалось получить чат обсуждения: %w", err)
 		}
 
-		if errJoin := module.Modf_JoinChannel(ctx, api, discussionChat); errJoin != nil {
+		if errJoin := module.Modf_JoinChannel(ctx, api, discussionChat, db, accountID); errJoin != nil {
 			log.Printf("[ERROR] Не удалось вступить в чат обсуждения: ID=%d Ошибка=%v", discussionChat.ID, errJoin)
 		}
 

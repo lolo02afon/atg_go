@@ -73,7 +73,7 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 		}
 
 		// Подписываемся на сам канал, чтобы получить доступ к дискуссии
-		if errJoinChannel := module.Modf_JoinChannel(ctx, api, channel); errJoinChannel != nil {
+		if errJoinChannel := module.Modf_JoinChannel(ctx, api, channel, db, accountID); errJoinChannel != nil {
 			log.Printf("[ERROR] Не удалось вступить в канал: ID=%d AccessHash=%d Ошибка=%v",
 				channel.ID, channel.AccessHash, errJoinChannel)
 		}
@@ -130,7 +130,7 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 			}
 
 			// Присоединяемся к чату обсуждения, чтобы иметь возможность читать и оставлять комментарии
-			if errJoinDisc := module.Modf_JoinChannel(ctx, api, discussionData.Chat); errJoinDisc != nil {
+			if errJoinDisc := module.Modf_JoinChannel(ctx, api, discussionData.Chat, db, accountID); errJoinDisc != nil {
 				log.Printf("[ERROR] Не удалось присоединиться к чату обсуждений: ID=%d Ошибка=%v", discussionData.Chat.ID, errJoinDisc)
 			}
 

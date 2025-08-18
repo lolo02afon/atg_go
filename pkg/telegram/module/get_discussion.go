@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"atg_go/pkg/storage"
+
 	"github.com/gotd/td/tg"
 )
 
@@ -83,7 +85,7 @@ func Modf_getPostDiscussion(
 
 // Modf_getDiscussionChat возвращает чат обсуждения, связанный с каналом.
 // Функция не привязана к конкретному посту и просто ищет связанный чат.
-func Modf_getDiscussionChat(ctx context.Context, api *tg.Client, channel *tg.Channel) (*tg.Channel, error) {
+func Modf_getDiscussionChat(ctx context.Context, api *tg.Client, channel *tg.Channel, db *storage.DB, accountID int) (*tg.Channel, error) {
 	// Запрашиваем полную информацию о канале, чтобы узнать ID связанного чата
 	full, err := api.ChannelsGetFullChannel(ctx, &tg.InputChannel{
 		ChannelID:  channel.ID,
@@ -118,8 +120,8 @@ func Modf_getDiscussionChat(ctx context.Context, api *tg.Client, channel *tg.Cha
 	if err != nil {
 		if tg.IsChannelPrivate(err) || tg.IsChannelParicipantMissing(err) {
 			// Присоединяемся к чату и пробуем ещё раз
-			if _, joinErr := api.ChannelsJoinChannel(ctx, &tg.InputChannel{ChannelID: discussion.ID, AccessHash: discussion.AccessHash}); joinErr != nil {
-				return nil, fmt.Errorf("не удалось присоединиться к чату обсуждения: %w", joinErr)
+			if errJoin := Modf_JoinChannel(ctx, api, discussion, db, accountID); errJoin != nil {
+				return nil, fmt.Errorf("не удалось присоединиться к чату обсуждения: %w", errJoin)
 			}
 
 			chats, err = api.ChannelsGetChannels(ctx, []tg.InputChannelClass{&tg.InputChannel{ChannelID: discussion.ID, AccessHash: discussion.AccessHash}})
