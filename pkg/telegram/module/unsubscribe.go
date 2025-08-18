@@ -18,7 +18,7 @@ import (
 func ModF_UnsubscribeAll(db *storage.DB, delay [2]int, limit int) error {
 	rand.Seed(time.Now().UnixNano())
 
-	// Получаем ссылки из заказов один раз, чтобы не обращаться к БД при каждой отписке
+	// Получаем ссылки из заказов (поле url_default) один раз, чтобы не обращаться к БД при каждой отписке
 	orderLinks, err := db.GetOrdersDefaultURLs()
 	if err != nil {
 		return err

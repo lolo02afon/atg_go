@@ -13,7 +13,7 @@ import (
 )
 
 // Modf_OrderLinkUpdate обновляет описание у всех аккаунтов согласно их order_id
-// Если order_id есть, в описание ставится ссылка из соответствующего заказа,
+// Если order_id есть, в описание ставится текст из поля url_description соответствующего заказа,
 // иначе описание очищается. Комментарии на русском языке по требованию пользователя.
 func Modf_OrderLinkUpdate(db *storage.DB) error {
 	// Перед обновлением описаний синхронизируем количество аккаунтов в заказах
@@ -30,25 +30,26 @@ func Modf_OrderLinkUpdate(db *storage.DB) error {
 	}
 
 	for _, acc := range accounts {
-		var link string
+		var description string
 		if acc.OrderID != nil {
-			// Получаем ссылку по умолчанию из заказа для подстановки в описание
+			// Получаем текст для описания из заказа (поле url_description)
 			order, err := db.GetOrderByID(*acc.OrderID)
 			if err != nil {
 				log.Printf("[LINK_UPDATE ERROR] заказ %d: %v", *acc.OrderID, err)
 				continue
 			}
-			link = order.URLDefault
+			description = order.URLDescription
 		}
-		if err := updateAccountLink(db, acc, link); err != nil {
+		if err := updateAccountDescription(db, acc, description); err != nil {
 			log.Printf("[LINK_UPDATE ERROR] аккаунт %d: %v", acc.ID, err)
 		}
 	}
 	return nil
 }
 
-// updateAccountLink устанавливает новое описание (about) для аккаунта
-func updateAccountLink(db *storage.DB, acc models.Account, link string) error {
+// updateAccountDescription устанавливает новое описание (about) для аккаунта
+// Описание берётся из поля url_description заказа
+func updateAccountDescription(db *storage.DB, acc models.Account, description string) error {
 	// Блокируем аккаунт, чтобы не выполнять параллельные операции
 	if err := accountmutex.LockAccount(acc.ID); err != nil {
 		return err
@@ -73,10 +74,10 @@ func updateAccountLink(db *storage.DB, acc models.Account, link string) error {
 			return err
 		}
 
-		// Если требуется поставить ссылку, делаем второй запрос
-		if link != "" {
+		// Если требуется установить описание, делаем второй запрос
+		if description != "" {
 			reqSet := tg.AccountUpdateProfileRequest{}
-			reqSet.SetAbout(link)
+			reqSet.SetAbout(description)
 			if _, err := api.AccountUpdateProfile(ctx, &reqSet); err != nil {
 				return err
 			}
