@@ -1,3 +1,6 @@
+-- Перечислимый тип для пола аккаунта
+CREATE TYPE IF NOT EXISTS gender_type AS ENUM ('male', 'female', 'neutral');
+
 -- Основная таблица аккаунтов Telegram
 CREATE TABLE IF NOT EXISTS accounts (
     id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- современный автоинкремент
@@ -5,7 +8,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     api_id INTEGER NOT NULL,                         -- API ID из my.telegram.org
     api_hash TEXT NOT NULL,                          -- API Hash из my.telegram.org
     is_authorized BOOLEAN DEFAULT false,             -- Флаг успешной авторизации
-    gender TEXT NOT NULL DEFAULT 'neutral' CHECK (gender IN ('male', 'female', 'neutral')), -- Пол аккаунта
+    gender gender_type[] NOT NULL DEFAULT ARRAY['neutral']::gender_type[], -- Пол(ы) аккаунта
     phone_code_hash TEXT,                            -- Хэш кода подтверждения из Telegram
     floodwait_until TIMESTAMPTZ NULL,                -- Время окончания флуд-бана с учётом часового пояса
     channels_limit_until TIMESTAMPTZ NULL,           -- Время, до которого запрещены новые подписки
