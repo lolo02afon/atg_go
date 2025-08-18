@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+
+	pq "github.com/lib/pq" // Для передачи массивов в запросах
 )
 
 // GetOrdersDefaultURLs возвращает список ссылок, от которых нельзя отписываться
@@ -39,19 +41,31 @@ func (db *DB) CreateOrder(o models.Order) (*models.Order, error) {
 	}
 	defer tx.Rollback()
 
-	// Проверяем, что указанная категория существует в таблице channels
-	var exists bool
-	if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM channels WHERE name = $1)`, o.Category).Scan(&exists); err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, fmt.Errorf("категория '%s' не найдена", o.Category)
+	// Проверяем наличие категории только если она указана
+	var category interface{}
+	if o.Category != nil {
+		// Проверяем, что такая категория существует в таблице channels
+		var exists bool
+		if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM channels WHERE name = $1)`, *o.Category).Scan(&exists); err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, fmt.Errorf("категория '%s' не найдена", *o.Category)
+		}
+		category = *o.Category
+	} else {
+		category = nil // Нет категории, будет сохранён NULL
 	}
 
-	// Вставляем запись о заказе вместе со ссылкой по умолчанию
+	// Если пол не указан, используем значение по умолчанию
+	if len(o.Gender) == 0 {
+		o.Gender = []string{"neutral"}
+	}
+
+	// Вставляем запись о заказе вместе со ссылкой по умолчанию и целевой аудиторией
 	err = tx.QueryRow(
-		`INSERT INTO orders (name, category, url_description, url_default, accounts_number_theory) VALUES ($1, $2, $3, $4, $5) RETURNING id, accounts_number_fact, date_time`,
-		o.Name, o.Category, o.URLDescription, o.URLDefault, o.AccountsNumberTheory, // передаём текст, категорию и ссылку по умолчанию
+		`INSERT INTO orders (name, category, url_description, url_default, accounts_number_theory, gender) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, accounts_number_fact, date_time`,
+		o.Name, category, o.URLDescription, o.URLDefault, o.AccountsNumberTheory, pq.Array(o.Gender),
 	).Scan(&o.ID, &o.AccountsNumberFact, &o.DateTime)
 	if err != nil {
 		return nil, err
@@ -96,10 +110,16 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 	defer tx.Rollback()
 
 	var o models.Order
+	var cat sql.NullString
 	err = tx.QueryRow(
-		`SELECT id, name, category, url_description, url_default, accounts_number_theory, accounts_number_fact, date_time FROM orders WHERE id = $1`,
+		`SELECT id, name, category, url_description, url_default, accounts_number_theory, accounts_number_fact, date_time, gender FROM orders WHERE id = $1`,
 		orderID,
-	).Scan(&o.ID, &o.Name, &o.Category, &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.DateTime) // читаем текст, категорию и ссылку по умолчанию
+	).Scan(&o.ID, &o.Name, &cat, &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.DateTime, pq.Array(&o.Gender)) // читаем текст, категорию и ссылку по умолчанию
+	if cat.Valid {
+		o.Category = &cat.String
+	} else {
+		o.Category = nil
+	}
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, err
@@ -182,10 +202,16 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 // Используется для получения ссылки при обновлении описаний аккаунтов
 func (db *DB) GetOrderByID(id int) (*models.Order, error) {
 	var o models.Order
+	var cat sql.NullString
 	err := db.Conn.QueryRow(
-		`SELECT id, name, category, url_description, url_default, accounts_number_theory, accounts_number_fact, date_time FROM orders WHERE id = $1`,
+		`SELECT id, name, category, url_description, url_default, accounts_number_theory, accounts_number_fact, date_time, gender FROM orders WHERE id = $1`,
 		id,
-	).Scan(&o.ID, &o.Name, &o.Category, &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.DateTime) // читаем текст, категорию и ссылку по умолчанию
+	).Scan(&o.ID, &o.Name, &cat, &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.DateTime, pq.Array(&o.Gender)) // читаем текст, категорию и ссылку по умолчанию
+	if cat.Valid {
+		o.Category = &cat.String
+	} else {
+		o.Category = nil
+	}
 	if err != nil {
 		return nil, err
 	}

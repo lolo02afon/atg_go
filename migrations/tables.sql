@@ -1,3 +1,11 @@
+-- Создаём перечисляемый тип для указания пола
+DO $$
+BEGIN
+    CREATE TYPE gender_type AS ENUM ('male', 'female', 'neutral');
+EXCEPTION
+    WHEN duplicate_object THEN NULL; -- Если тип уже существует, игнорируем ошибку
+END$$;
+
 -- Основная таблица аккаунтов Telegram
 CREATE TABLE IF NOT EXISTS accounts (
     id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- современный автоинкремент
@@ -5,7 +13,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     api_id INTEGER NOT NULL,                         -- API ID из my.telegram.org
     api_hash TEXT NOT NULL,                          -- API Hash из my.telegram.org
     is_authorized BOOLEAN DEFAULT false,             -- Флаг успешной авторизации
-    gender TEXT NOT NULL DEFAULT 'neutral' CHECK (gender IN ('male', 'female', 'neutral')), -- Пол аккаунта
+    gender gender_type[] NOT NULL DEFAULT ARRAY['neutral']::gender_type[] CHECK (array_length(gender, 1) >= 1), -- Пол аккаунта, можно указать несколько значений
     phone_code_hash TEXT,                            -- Хэш кода подтверждения из Telegram
     floodwait_until TIMESTAMPTZ NULL,                -- Время окончания флуд-бана с учётом часового пояса
     channels_limit_until TIMESTAMPTZ NULL,           -- Время, до которого запрещены новые подписки
@@ -15,7 +23,7 @@ CREATE TABLE IF NOT EXISTS accounts (
 -- Таблица со списокм каналов в определенной тематике 
 CREATE TABLE IF NOT EXISTS channels (
     id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- современный автоинкремент
-    name TEXT NOT NULL,              -- Произвольное название группы каналов
+    name TEXT NOT NULL UNIQUE,              -- Произвольное название группы каналов (уникальное)
     urls JSONB NOT NULL              -- Массив URL в формате ["https://t.me/channel1", "https://t.me/channel2"]
 );
 

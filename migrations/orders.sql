@@ -1,18 +1,41 @@
+-- Создаём тип gender_type, если он ещё не создан
+DO $$
+BEGIN
+    CREATE TYPE gender_type AS ENUM ('male', 'female', 'neutral');
+EXCEPTION
+    WHEN duplicate_object THEN NULL; -- Тип уже существует
+END$$;
+
+-- Обеспечиваем уникальность названий каналов, чтобы использовать их в качестве категории
+ALTER TABLE channels
+    ADD CONSTRAINT IF NOT EXISTS channels_name_key UNIQUE (name);
+
 -- Таблица заказов на размещение ссылок
 CREATE TABLE IF NOT EXISTS orders (
     id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- современный автоинкремент
     name TEXT NOT NULL,
-    category TEXT NOT NULL, -- Название категории (берём из channels.name)
+    category TEXT REFERENCES channels(name) ON DELETE SET NULL, -- Название категории (берём из channels.name, может отсутствовать)
     url_description TEXT NOT NULL, -- ссылка для описания аккаунта
     url_default TEXT NOT NULL, -- ссылка по умолчанию
     accounts_number_theory INTEGER NOT NULL,
     accounts_number_fact INTEGER NOT NULL DEFAULT 0,
+    gender gender_type[] NOT NULL DEFAULT ARRAY['neutral']::gender_type[] CHECK (array_length(gender, 1) >= 1), -- Целевая аудитория по полу
     date_time TIMESTAMPTZ NOT NULL DEFAULT NOW() -- сохраняем время с учётом часового пояса
 );
 
--- Добавляем колонку category, если таблица уже создана
+-- Добавляем колонку category с внешним ключом, если таблица уже создана
 ALTER TABLE orders
-    ADD COLUMN IF NOT EXISTS category TEXT NOT NULL;
+    ADD COLUMN IF NOT EXISTS category TEXT REFERENCES channels(name) ON DELETE SET NULL;
+
+ALTER TABLE orders
+    ADD CONSTRAINT IF NOT EXISTS orders_category_fkey FOREIGN KEY (category) REFERENCES channels(name) ON DELETE SET NULL;
+
+-- Добавляем колонку gender, если таблица уже создана
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS gender gender_type[] NOT NULL DEFAULT ARRAY['neutral']::gender_type[];
+
+ALTER TABLE orders
+    ADD CONSTRAINT IF NOT EXISTS orders_gender_not_empty CHECK (array_length(gender, 1) >= 1);
 
 -- Добавление поля order_id в таблицу accounts
 ALTER TABLE accounts

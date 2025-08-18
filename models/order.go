@@ -15,10 +15,11 @@ import "time"
 type Order struct {
 	ID                   int       `json:"id"`
 	Name                 string    `json:"name"`
-	Category             string    `json:"category"`        // Название категории (из таблицы channels)
+	Category             *string   `json:"category"`        // Название категории (из таблицы channels, может отсутствовать)
 	URLDescription       string    `json:"url_description"` // Текст ссылки для описания
 	URLDefault           string    `json:"url_default"`     // Ссылка по умолчанию
 	AccountsNumberTheory int       `json:"accounts_number_theory"`
 	AccountsNumberFact   int       `json:"accounts_number_fact"`
+	Gender               []string  `json:"gender"` // Целевая аудитория по полу
 	DateTime             time.Time `json:"date_time"`
 }
