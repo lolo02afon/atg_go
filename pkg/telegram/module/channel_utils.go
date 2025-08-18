@@ -8,8 +8,11 @@ import (
 	"math/rand"
 	"sort"
 	"strings"
+	"time"
 
 	"atg_go/models"
+	"atg_go/pkg/storage"
+	statistics "atg_go/pkg/telegram/statistics"
 
 	"golang.org/x/net/proxy"
 
@@ -19,14 +22,36 @@ import (
 	"github.com/gotd/td/tg"
 )
 
-// подписывает аккаунт на указанный канал (или группу обсуждения).
-func Modf_JoinChannel(ctx context.Context, api *tg.Client, channel *tg.Channel) error {
-	// Передаём напрямую InputChannel — так реализован метод ChannelsJoinChannel в gotd/td
-	_, err := api.ChannelsJoinChannel(ctx, &tg.InputChannel{
+// Modf_JoinChannel подписывает аккаунт на канал с учётом лимита подписок.
+// Если ранее был достигнут предел в 500 каналов, новая попытка не выполняется до конца суток.
+func Modf_JoinChannel(ctx context.Context, api *tg.Client, channel *tg.Channel, db *storage.DB, accountID int) error {
+	// Проверяем, не активен ли блок на новые подписки для данного аккаунта.
+	blocked, err := statistics.IsChannelsLimitActive(db, accountID)
+	if err != nil {
+		return fmt.Errorf("не удалось проверить лимит подписок: %w", err)
+	}
+	if blocked {
+		// Если блок активен, не делаем запрос и сообщаем об этом через ошибку.
+		return fmt.Errorf("аккаунт %d временно не может подписываться на новые каналы", accountID)
+	}
+
+	// Пытаемся подписаться на канал.
+	_, err = api.ChannelsJoinChannel(ctx, &tg.InputChannel{
 		ChannelID:  channel.ID,
 		AccessHash: channel.AccessHash,
 	})
-	return err
+	if err != nil {
+		// Если ошибка связана с превышением лимита 500 каналов, фиксируем её и ставим блок до конца суток.
+		if strings.Contains(err.Error(), "USER_CHANNELS_TOO_MUCH") {
+			// Вычисляем момент времени 23:59 текущих суток.
+			now := time.Now()
+			until := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 0, now.Location())
+			_ = statistics.MarkChannelsLimit(db, accountID, until) // Обновляем время блокировки в БД
+			log.Printf("[WARN] Аккаунт %d достиг лимита подписок: %v", accountID, err)
+		}
+		return err
+	}
+	return nil
 }
 
 // возвращает список сообщений из канала
