@@ -23,8 +23,11 @@ const ActivityTypeComment = "comment"
 func (db *DB) SaveActivity(accountID, channelID, messageID int, activityType string) error {
 	chID := strconv.FormatInt(int64(channelID), 10) // сохраняем ID как строку
 	msgID := strconv.FormatInt(int64(messageID), 10)
+	// Добавляем ON CONFLICT, чтобы игнорировать повторные записи без ошибки
 	_, err := db.Conn.Exec(
-		`INSERT INTO activity (id_account, id_channel, id_message, activity_type, date_time) VALUES ($1, $2, $3, $4, $5)`,
+		`INSERT INTO activity (id_account, id_channel, id_message, activity_type, date_time)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT DO NOTHING`,
 		accountID, chID, msgID, activityType, time.Now(),
 	)
 	return err
