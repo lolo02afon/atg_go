@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+
+	"github.com/lib/pq"
 )
 
 // GetOrdersDefaultURLs возвращает список ссылок, от которых нельзя отписываться
@@ -50,16 +52,13 @@ func (db *DB) CreateOrder(o models.Order) (*models.Order, error) {
 		}
 	}
 
-	// Проверяем поле gender и устанавливаем значение по умолчанию
-	gender := o.Gender
-	if gender != "male" && gender != "female" && gender != "neutral" {
-		gender = "neutral"
-	}
+	// Фильтруем поле gender через общую функцию, чтобы хранить только допустимые значения
+	gender := models.FilterGenders(o.Gender)
 
 	// Вставляем запись о заказе вместе со ссылкой по умолчанию
 	err = tx.QueryRow(
 		`INSERT INTO orders (name, category, url_description, url_default, accounts_number_theory, gender) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, accounts_number_fact, date_time`,
-		o.Name, o.Category, o.URLDescription, o.URLDefault, o.AccountsNumberTheory, gender,
+		o.Name, o.Category, o.URLDescription, o.URLDefault, o.AccountsNumberTheory, pq.Array(gender),
 	).Scan(&o.ID, &o.AccountsNumberFact, &o.DateTime)
 	if err != nil {
 		return nil, err
@@ -109,7 +108,7 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 	err = tx.QueryRow(
 		`SELECT id, name, category, url_description, url_default, accounts_number_theory, accounts_number_fact, gender, date_time FROM orders WHERE id = $1`,
 		orderID,
-	).Scan(&o.ID, &o.Name, &category, &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.Gender, &o.DateTime) // читаем текст, категорию и ссылку по умолчанию
+	).Scan(&o.ID, &o.Name, &category, &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, pq.Array(&o.Gender), &o.DateTime) // читаем текст, категорию и ссылку по умолчанию
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, err
@@ -199,7 +198,7 @@ func (db *DB) GetOrderByID(id int) (*models.Order, error) {
 	err := db.Conn.QueryRow(
 		`SELECT id, name, category, url_description, url_default, accounts_number_theory, accounts_number_fact, gender, date_time FROM orders WHERE id = $1`,
 		id,
-	).Scan(&o.ID, &o.Name, &category, &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.Gender, &o.DateTime) // читаем текст, категорию и ссылку по умолчанию
+	).Scan(&o.ID, &o.Name, &category, &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, pq.Array(&o.Gender), &o.DateTime) // читаем текст, категорию и ссылку по умолчанию
 	if err != nil {
 		return nil, err
 	}

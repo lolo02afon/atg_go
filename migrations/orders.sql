@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS orders (
     url_default TEXT NOT NULL, -- ссылка по умолчанию
     accounts_number_theory INTEGER NOT NULL,
     accounts_number_fact INTEGER NOT NULL DEFAULT 0,
-    gender gender_enum NOT NULL DEFAULT 'neutral', -- Пол для отбора аккаунтов
+    gender gender_enum[] NOT NULL DEFAULT ARRAY['neutral']::gender_enum[] CHECK (array_length(gender,1) > 0), -- Пол(ы) для отбора аккаунтов
     date_time TIMESTAMPTZ NOT NULL DEFAULT NOW() -- сохраняем время с учётом часового пояса
 );
 

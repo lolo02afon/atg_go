@@ -62,11 +62,8 @@ func (db *DB) CreateAccount(account models.Account) (*models.Account, error) {
               RETURNING id
        `
 
-	// Если пол не указан, устанавливаем значение по умолчанию
-	gender := account.Gender
-	if len(gender) == 0 {
-		gender = pq.StringArray{"neutral"}
-	}
+	// Фильтруем список полов через общую функцию, чтобы избежать дублирования логики
+	gender := models.FilterGenders(account.Gender)
 
 	err := db.Conn.QueryRow(
 		query,
