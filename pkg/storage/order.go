@@ -219,7 +219,7 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 	defer tx.Rollback()
 
 	// Получаем все заказы и загружаем их в память, чтобы затем закрыть курсор
-	rows, err := tx.Query(`SELECT id, accounts_number_theory, accounts_number_fact FROM orders`)
+	rows, err := tx.Query(`SELECT id, accounts_number_theory, accounts_number_fact, gender FROM orders`)
 	if err != nil {
 		log.Printf("[DB ERROR] выборка заказов: %v", err)
 		return err
@@ -230,13 +230,14 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 		id     int
 		theory int
 		fact   int
+		gender pq.StringArray
 	}
 	var orders []orderData
 
 	// Считываем все заказы из курсора
 	for rows.Next() {
 		var o orderData
-		if err := rows.Scan(&o.id, &o.theory, &o.fact); err != nil {
+		if err := rows.Scan(&o.id, &o.theory, &o.fact, pq.Array(&o.gender)); err != nil {
 			log.Printf("[DB ERROR] чтение заказа: %v", err)
 			return err
 		}
@@ -254,8 +255,41 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 		orderID := o.id
 		theory := o.theory
 		fact := o.fact
+		genders := o.gender
 
-		// Считаем реальное количество аккаунтов, закреплённых за заказом
+		// Сначала освобождаем аккаунты, чей пол не соответствует требованиям заказа
+		misRows, err := tx.Query(
+			`SELECT id FROM accounts WHERE order_id = $1 AND NOT (gender && $2::gender_enum[])`,
+			orderID, pq.Array(genders),
+		)
+		if err != nil {
+			log.Printf("[DB ERROR] выборка аккаунтов с неподходящим полом для заказа %d: %v", orderID, err)
+			return err
+		}
+		var misIDs []int
+		for misRows.Next() {
+			var accID int
+			if err := misRows.Scan(&accID); err != nil {
+				misRows.Close()
+				log.Printf("[DB ERROR] чтение аккаунта для очистки заказа %d: %v", orderID, err)
+				return err
+			}
+			misIDs = append(misIDs, accID)
+		}
+		if err := misRows.Err(); err != nil {
+			misRows.Close()
+			log.Printf("[DB ERROR] курсор неподходящих аккаунтов для заказа %d: %v", orderID, err)
+			return err
+		}
+		misRows.Close()
+		for _, accID := range misIDs {
+			if _, err := tx.Exec(`UPDATE accounts SET order_id = NULL WHERE id = $1`, accID); err != nil {
+				log.Printf("[DB ERROR] освобождение аккаунта %d для заказа %d: %v", accID, orderID, err)
+				return err
+			}
+		}
+
+		// Считаем реальное количество аккаунтов, закреплённых за заказом, после очистки
 		var actual int
 		if err := tx.QueryRow(`SELECT COUNT(*) FROM accounts WHERE order_id = $1`, orderID).Scan(&actual); err != nil {
 			log.Printf("[DB ERROR] подсчёт аккаунтов заказа %d: %v", orderID, err)
@@ -277,8 +311,8 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 				// Нужно добавить недостающие аккаунты
 				need := theory - actual
 				accRows, err := tx.Query(
-					`SELECT id FROM accounts WHERE order_id IS NULL AND is_authorized = TRUE ORDER BY RANDOM() LIMIT $1`,
-					need,
+					`SELECT id FROM accounts WHERE order_id IS NULL AND is_authorized = TRUE AND gender && $1::gender_enum[] ORDER BY RANDOM() LIMIT $2`,
+					pq.Array(genders), need,
 				)
 				if err != nil {
 					log.Printf("[DB ERROR] выборка аккаунтов для заказа %d: %v", orderID, err)
