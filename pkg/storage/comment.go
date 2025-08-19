@@ -7,6 +7,8 @@ import (
 	"log"
 	"math/rand"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 type CommentDB struct {
@@ -17,95 +19,51 @@ func NewCommentDB(conn *sql.DB) *CommentDB {
 	return &CommentDB{Conn: conn}
 }
 
-// GetRandomChannel возвращает случайный URL канала
-func (cdb *CommentDB) GetRandomChannel() (string, error) {
-	var channel models.Channel
-
-	// 1. Получаем общее количество записей
-	var count int
-	err := cdb.Conn.QueryRow("SELECT COUNT(*) FROM channels").Scan(&count)
-	if err != nil {
-		log.Printf("[DB ERROR] Channel count failed: %v", err)
+// GetRandomChannel выбирает случайный URL из каналов, подходящих под категории заказа.
+// Мы фильтруем по заказу, чтобы аккаунт не отправлял активность в чужие тематики.
+func (cdb *CommentDB) GetRandomChannel(orderID int) (string, error) {
+	// 1. Загружаем список категорий заказа, иначе не сможем сузить выбор каналов.
+	var categories pq.StringArray
+	if err := cdb.Conn.QueryRow(`SELECT category FROM orders WHERE id = $1`, orderID).Scan(&categories); err != nil {
+		log.Printf("[DB ERROR] получение категорий заказа %d: %v", orderID, err)
 		return "", err
 	}
-
-	if count == 0 {
+	if len(categories) == 0 {
+		// Заказ без категорий не даёт нам критериев отбора, поэтому дальше идти бессмысленно.
 		return "", sql.ErrNoRows
 	}
 
-	// 2. Выбираем случайную запись
-	rand.Seed(time.Now().UnixNano())
-	offset := rand.Intn(count)
-
-	row := cdb.Conn.QueryRow(`
-        SELECT id, name, urls 
-        FROM channels 
-        LIMIT 1 OFFSET $1
-    `, offset)
-
-	var urlsJSON []byte
-	if err := row.Scan(&channel.ID, &channel.Name, &urlsJSON); err != nil {
-		log.Printf("[DB ERROR] Channel scan failed: %v", err)
-		return "", err
-	}
-
-	// 3. Парсим JSON
-	if err := json.Unmarshal(urlsJSON, &channel.URLs); err != nil {
-		log.Printf("[DB ERROR] URL parsing failed: %v", err)
-		return "", err
-	}
-
-	if len(channel.URLs) == 0 {
-		return "", sql.ErrNoRows
-	}
-
-	// 4. Выбираем случайный URL
-	url := channel.URLs[rand.Intn(len(channel.URLs))]
-	log.Printf("[DB] Selected channel: %s from group '%s'", url, channel.Name)
-
-	return url, nil
-}
-
-// возвращает идентификатор и случайный URL канала
-func (cdb *CommentDB) GetRandomChannelWithID() (int, string, error) {
-	var channel models.Channel
-
-	var count int
-	err := cdb.Conn.QueryRow("SELECT COUNT(*) FROM channels").Scan(&count)
-	if err != nil {
-		log.Printf("[DB ERROR] Channel count failed: %v", err)
-		return 0, "", err
-	}
-	if count == 0 {
-		return 0, "", sql.ErrNoRows
-	}
-
-	rand.Seed(time.Now().UnixNano())
-	offset := rand.Intn(count)
-
+	// 2. Случайно выбираем один канал из подходящих по категориям.
 	row := cdb.Conn.QueryRow(`
         SELECT id, name, urls
         FROM channels
-        LIMIT 1 OFFSET $1
-    `, offset)
+        WHERE name = ANY($1)
+        ORDER BY RANDOM()
+        LIMIT 1
+    `, pq.Array(categories))
 
+	var channel models.Channel
 	var urlsJSON []byte
 	if err := row.Scan(&channel.ID, &channel.Name, &urlsJSON); err != nil {
-		log.Printf("[DB ERROR] Channel scan failed: %v", err)
-		return 0, "", err
+		// Передаём ошибку дальше, чтобы вызывающая сторона могла решить, как реагировать на пустую выборку.
+		log.Printf("[DB ERROR] выбор канала по заказу %d: %v", orderID, err)
+		return "", err
 	}
 
+	// 3. Превращаем JSON-массив ссылок в удобный для случайного выбора срез.
 	if err := json.Unmarshal(urlsJSON, &channel.URLs); err != nil {
-		log.Printf("[DB ERROR] URL parsing failed: %v", err)
-		return 0, "", err
+		log.Printf("[DB ERROR] парсинг ссылок канала %d: %v", channel.ID, err)
+		return "", err
 	}
-
 	if len(channel.URLs) == 0 {
-		return 0, "", sql.ErrNoRows
+		// Без ссылок канал не пригоден для активности.
+		return "", sql.ErrNoRows
 	}
 
+	// 4. Выбираем одну ссылку случайным образом, чтобы равномерно распределять нагрузку по URL.
+	rand.Seed(time.Now().UnixNano())
 	url := channel.URLs[rand.Intn(len(channel.URLs))]
-	log.Printf("[DB] Selected channel: %s from group '%s'", url, channel.Name)
+	log.Printf("[DB] выбран канал %s для заказа %d", url, orderID)
 
-	return channel.ID, url, nil
+	return url, nil
 }
