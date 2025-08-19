@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     floodwait_until TIMESTAMPTZ NULL,                -- Время окончания флуд-бана с учётом часового пояса
     channels_limit_until TIMESTAMPTZ NULL,           -- Время, до которого запрещены новые подписки
     proxy_id INTEGER REFERENCES proxy(id)          -- Привязка к прокси
+    , order_id INTEGER                 -- Поле для связи с заказом (FK добавляется в orders.sql)
 );
 
 -- Таблица со списокм каналов в определенной тематике 

@@ -10,14 +10,6 @@ CREATE TABLE IF NOT EXISTS orders (
     date_time TIMESTAMPTZ NOT NULL DEFAULT NOW() -- сохраняем время с учётом часового пояса
 );
 
--- Добавляем колонку category, если таблица уже создана
-ALTER TABLE orders
-    ADD COLUMN IF NOT EXISTS category TEXT NOT NULL;
-
--- Добавление поля order_id в таблицу accounts
-ALTER TABLE accounts
-    ADD COLUMN IF NOT EXISTS order_id INTEGER; -- Поле для связи с заказом
-
 -- Функция для автоматического обновления количества фактических аккаунтов
 CREATE OR REPLACE FUNCTION update_order_accounts_number() RETURNS TRIGGER AS $$
 BEGIN
