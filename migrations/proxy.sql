@@ -1,16 +1,4 @@
--- Таблица прокси-серверов
-CREATE TABLE IF NOT EXISTS proxy (
-    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- современный автоинкремент
-    ip TEXT NOT NULL,
-    port INTEGER NOT NULL,
-    login TEXT,
-    password TEXT,
-    ipv6 TEXT,
-    account_count INTEGER NOT NULL DEFAULT 0,
-    is_active BOOLEAN NULL
-);
-
--- Триггер для автоматического обновления account_count
+-- Функция и триггеры поддерживают актуальное количество аккаунтов на каждом прокси
 CREATE OR REPLACE FUNCTION update_proxy_account_count() RETURNS TRIGGER AS $$
 BEGIN
     IF TG_OP = 'INSERT' THEN
