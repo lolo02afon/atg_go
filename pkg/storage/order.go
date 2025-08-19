@@ -39,23 +39,32 @@ func (db *DB) CreateOrder(o models.Order) (*models.Order, error) {
 	}
 	defer tx.Rollback()
 
-	// Проверяем, что указанная категория существует в таблице channels
-	var exists bool
-	if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM channels WHERE name = $1)`, o.Category).Scan(&exists); err != nil {
-		return nil, err
+	// Проверяем категорию только если она указана
+	if o.Category != nil {
+		var exists bool
+		if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM channels WHERE name = $1)`, *o.Category).Scan(&exists); err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, fmt.Errorf("категория '%s' не найдена", *o.Category)
+		}
 	}
-	if !exists {
-		return nil, fmt.Errorf("категория '%s' не найдена", o.Category)
+
+	// Проверяем поле gender и устанавливаем значение по умолчанию
+	gender := o.Gender
+	if gender != "male" && gender != "female" && gender != "neutral" {
+		gender = "neutral"
 	}
 
 	// Вставляем запись о заказе вместе со ссылкой по умолчанию
 	err = tx.QueryRow(
-		`INSERT INTO orders (name, category, url_description, url_default, accounts_number_theory) VALUES ($1, $2, $3, $4, $5) RETURNING id, accounts_number_fact, date_time`,
-		o.Name, o.Category, o.URLDescription, o.URLDefault, o.AccountsNumberTheory, // передаём текст, категорию и ссылку по умолчанию
+		`INSERT INTO orders (name, category, url_description, url_default, accounts_number_theory, gender) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, accounts_number_fact, date_time`,
+		o.Name, o.Category, o.URLDescription, o.URLDefault, o.AccountsNumberTheory, gender,
 	).Scan(&o.ID, &o.AccountsNumberFact, &o.DateTime)
 	if err != nil {
 		return nil, err
 	}
+	o.Gender = gender
 
 	// Выбираем свободные аккаунты в случайном порядке
 	rows, err := tx.Query(
@@ -96,15 +105,19 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 	defer tx.Rollback()
 
 	var o models.Order
+	var category sql.NullString
 	err = tx.QueryRow(
-		`SELECT id, name, category, url_description, url_default, accounts_number_theory, accounts_number_fact, date_time FROM orders WHERE id = $1`,
+		`SELECT id, name, category, url_description, url_default, accounts_number_theory, accounts_number_fact, gender, date_time FROM orders WHERE id = $1`,
 		orderID,
-	).Scan(&o.ID, &o.Name, &o.Category, &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.DateTime) // читаем текст, категорию и ссылку по умолчанию
+	).Scan(&o.ID, &o.Name, &category, &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.Gender, &o.DateTime) // читаем текст, категорию и ссылку по умолчанию
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, err
 		}
 		return nil, err
+	}
+	if category.Valid {
+		o.Category = &category.String
 	}
 
 	if _, err := tx.Exec(`UPDATE orders SET accounts_number_theory = $1 WHERE id = $2`, newNumber, orderID); err != nil {
@@ -182,12 +195,16 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 // Используется для получения ссылки при обновлении описаний аккаунтов
 func (db *DB) GetOrderByID(id int) (*models.Order, error) {
 	var o models.Order
+	var category sql.NullString
 	err := db.Conn.QueryRow(
-		`SELECT id, name, category, url_description, url_default, accounts_number_theory, accounts_number_fact, date_time FROM orders WHERE id = $1`,
+		`SELECT id, name, category, url_description, url_default, accounts_number_theory, accounts_number_fact, gender, date_time FROM orders WHERE id = $1`,
 		id,
-	).Scan(&o.ID, &o.Name, &o.Category, &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.DateTime) // читаем текст, категорию и ссылку по умолчанию
+	).Scan(&o.ID, &o.Name, &category, &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.Gender, &o.DateTime) // читаем текст, категорию и ссылку по умолчанию
 	if err != nil {
 		return nil, err
+	}
+	if category.Valid {
+		o.Category = &category.String
 	}
 	return &o, nil
 }

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log"
 
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 )
 
 type DB struct {
@@ -62,10 +62,10 @@ func (db *DB) CreateAccount(account models.Account) (*models.Account, error) {
               RETURNING id
        `
 
-	// Если пол не указан или задан неверно, используем значение по умолчанию
+	// Если пол не указан, устанавливаем значение по умолчанию
 	gender := account.Gender
-	if gender != "male" && gender != "female" {
-		gender = "neutral"
+	if len(gender) == 0 {
+		gender = pq.StringArray{"neutral"}
 	}
 
 	err := db.Conn.QueryRow(
@@ -75,7 +75,7 @@ func (db *DB) CreateAccount(account models.Account) (*models.Account, error) {
 		account.ApiHash,
 		account.PhoneCodeHash,
 		account.ProxyID,
-		gender,
+		pq.Array(gender),
 	).Scan(&account.ID)
 
 	if err != nil {
@@ -115,7 +115,7 @@ func (db *DB) GetAccountByID(id int) (*models.Account, error) {
 		&account.ApiHash,
 		&account.PhoneCodeHash,
 		&account.IsAuthorized,
-		&account.Gender,
+		pq.Array(&account.Gender),
 		&account.ProxyID,
 		&account.OrderID,
 		&proxyID,
@@ -192,7 +192,7 @@ func (db *DB) GetLastAccount() (*models.Account, error) {
 		&account.ApiHash,
 		&account.PhoneCodeHash,
 		&account.IsAuthorized,
-		&account.Gender,
+		pq.Array(&account.Gender),
 		&account.ProxyID,
 		&account.OrderID,
 		&proxyID,
@@ -282,7 +282,7 @@ func (db *DB) GetAccountByPhone(phone string) (*models.Account, error) {
 		&account.ApiHash,
 		&account.PhoneCodeHash,
 		&account.IsAuthorized,
-		&account.Gender,
+		pq.Array(&account.Gender),
 		&account.ProxyID,
 		&account.OrderID,
 		&proxyID,
@@ -384,7 +384,7 @@ func (db *DB) GetAuthorizedAccounts() ([]models.Account, error) {
 			&account.ApiHash,
 			&account.PhoneCodeHash,
 			&account.IsAuthorized,
-			&account.Gender,
+			pq.Array(&account.Gender),
 			&accountProxyID,
 			&accountOrderID,
 			&proxyID,
