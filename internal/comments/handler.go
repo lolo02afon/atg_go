@@ -106,7 +106,8 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		}
 
 		// --- Выбор канала для каждого аккаунта ---
-		channelURL, err := h.CommentDB.GetRandomChannel()
+		// Используем категории заказа, чтобы аккаунт не выходил за рамки своей задачи.
+		channelURL, err := h.CommentDB.GetRandomChannel(*account.OrderID)
 		if errors.Is(err, sql.ErrNoRows) {
 			log.Printf("[HANDLER ERROR] No channels available: %v", err)
 			c.JSON(http.StatusNotFound, gin.H{"error": "No channels available"})

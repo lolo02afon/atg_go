@@ -94,7 +94,8 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 		}
 
 		// Выбор случайного канала
-		channelURL, err := h.CommentDB.GetRandomChannel()
+		// Сужаем выборку каналов до категорий заказа, чтобы реакция попадала в нужную аудиторию.
+		channelURL, err := h.CommentDB.GetRandomChannel(*account.OrderID)
 		if errors.Is(err, sql.ErrNoRows) {
 			log.Printf("[HANDLER ERROR] Нет доступных каналов: %v", err)
 			c.JSON(http.StatusNotFound, gin.H{"error": "No channels available"})
