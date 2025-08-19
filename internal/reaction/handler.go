@@ -1,6 +1,7 @@
 package reaction
 
 import (
+	"atg_go/models"
 	"atg_go/pkg/storage"
 	"atg_go/pkg/telegram"
 	"database/sql"
@@ -48,9 +49,20 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get accounts"})
 		return
 	}
+
+	// Фильтруем аккаунты, оставляя только те, что закреплены за заказом.
+	// Так мы предотвращаем участие свободных аккаунтов в активности.
+	var orderedAccounts []models.Account
+	for _, acc := range accounts {
+		if acc.OrderID != nil {
+			orderedAccounts = append(orderedAccounts, acc)
+		}
+	}
+	accounts = orderedAccounts
+
 	if len(accounts) == 0 {
-		log.Printf("[HANDLER WARN] Нет авторизованных аккаунтов")
-		c.JSON(http.StatusNotFound, gin.H{"error": "No authorized accounts available"})
+		log.Printf("[HANDLER WARN] Нет авторизованных аккаунтов с заказом")
+		c.JSON(http.StatusNotFound, gin.H{"error": "No authorized ordered accounts available"})
 		return
 	}
 

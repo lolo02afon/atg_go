@@ -1,6 +1,7 @@
 package comments
 
 import (
+	"atg_go/models"
 	"atg_go/pkg/storage"
 	"atg_go/pkg/telegram"
 	"database/sql"
@@ -46,9 +47,21 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get accounts"})
 		return
 	}
+
+	// Оставляем только аккаунты, которые привязаны к заказу.
+	// Это важно, поскольку активность разрешена исключительно для аккаунтов,
+	// выполняющих заказ, чтобы избежать действий «свободных» аккаунтов.
+	var orderedAccounts []models.Account
+	for _, acc := range accounts {
+		if acc.OrderID != nil {
+			orderedAccounts = append(orderedAccounts, acc)
+		}
+	}
+	accounts = orderedAccounts
+
 	if len(accounts) == 0 {
-		log.Printf("[HANDLER WARN] No authorized accounts found")
-		c.JSON(http.StatusNotFound, gin.H{"error": "No authorized accounts available"})
+		log.Printf("[HANDLER WARN] No authorized accounts with order found")
+		c.JSON(http.StatusNotFound, gin.H{"error": "No authorized ordered accounts available"})
 		return
 	}
 
