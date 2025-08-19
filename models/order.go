@@ -1,6 +1,10 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"github.com/lib/pq"
+)
 
 // Order описывает заказ на размещение ссылки в описании аккаунтов
 // name - произвольное название заказа
@@ -13,13 +17,13 @@ import "time"
 // Комментарии в коде на русском языке по требованию пользователя
 
 type Order struct {
-	ID                   int       `json:"id"`
-	Name                 string    `json:"name"`
-	Category             *string   `json:"category"`        // Категория из таблицы channels (может быть NULL)
-	URLDescription       string    `json:"url_description"` // Текст ссылки для описания
-	URLDefault           string    `json:"url_default"`     // Ссылка по умолчанию
-	AccountsNumberTheory int       `json:"accounts_number_theory"`
-	AccountsNumberFact   int       `json:"accounts_number_fact"`
-	Gender               string    `json:"gender"` // Пол аккаунтов для заказа
-	DateTime             time.Time `json:"date_time"`
+	ID                   int            `json:"id"`
+	Name                 string         `json:"name"`
+	Category             *string        `json:"category"`        // Категория из таблицы channels (может быть NULL)
+	URLDescription       string         `json:"url_description"` // Текст ссылки для описания
+	URLDefault           string         `json:"url_default"`     // Ссылка по умолчанию
+	AccountsNumberTheory int            `json:"accounts_number_theory"`
+	AccountsNumberFact   int            `json:"accounts_number_fact"`
+	Gender               pq.StringArray `json:"gender"` // Пол(ы) аккаунтов для заказа
+	DateTime             time.Time      `json:"date_time"`
 }
