@@ -1,6 +1,18 @@
 -- Тип перечисления для пола аккаунтов
 CREATE TYPE gender_enum AS ENUM ('male', 'female', 'neutral');
 
+-- Таблица прокси-серверов хранит данные о доступных прокси и используется в других таблицах, поэтому создаётся раньше
+CREATE TABLE IF NOT EXISTS proxy (
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- современный автоинкремент
+    ip TEXT NOT NULL,
+    port INTEGER NOT NULL,
+    login TEXT,
+    password TEXT,
+    ipv6 TEXT,
+    account_count INTEGER NOT NULL DEFAULT 0,
+    is_active BOOLEAN NULL
+);
+
 -- Основная таблица аккаунтов Telegram
 CREATE TABLE IF NOT EXISTS accounts (
     id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- современный автоинкремент
@@ -16,7 +28,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     order_id INTEGER                 -- Поле для связи с заказом (FK добавляется в orders.sql)
 );
 
--- Таблица со списокм каналов в определенной тематике 
+-- Таблица со списком каналов в определённой тематике
 CREATE TABLE IF NOT EXISTS channels (
     id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- современный автоинкремент
     name TEXT NOT NULL UNIQUE,        -- Произвольное название группы каналов (уникальное для FK)
