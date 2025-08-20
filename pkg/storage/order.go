@@ -127,9 +127,10 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 
 	var o models.Order
 	err = tx.QueryRow(
-		`SELECT id, name, category, url_description, url_default, accounts_number_theory, accounts_number_fact, gender, date_time FROM orders WHERE id = $1`,
+		// Приводим gender к text[], иначе pq не сможет сканировать массив enum
+		`SELECT id, name, category, url_description, url_default, accounts_number_theory, accounts_number_fact, gender::text[], date_time FROM orders WHERE id = $1`,
 		orderID,
-	).Scan(&o.ID, &o.Name, pq.Array(&o.Category), &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, pq.Array(&o.Gender), &o.DateTime) // читаем текст, категории и ссылку по умолчанию
+	).Scan(&o.ID, &o.Name, pq.Array(&o.Category), &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.Gender, &o.DateTime) // читаем текст, категории и ссылку по умолчанию
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, err
@@ -213,9 +214,10 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 func (db *DB) GetOrderByID(id int) (*models.Order, error) {
 	var o models.Order
 	err := db.Conn.QueryRow(
-		`SELECT id, name, category, url_description, url_default, accounts_number_theory, accounts_number_fact, gender, date_time FROM orders WHERE id = $1`,
+		// gender приводим к text[], чтобы избежать ошибок сканирования enum-массива
+		`SELECT id, name, category, url_description, url_default, accounts_number_theory, accounts_number_fact, gender::text[], date_time FROM orders WHERE id = $1`,
 		id,
-	).Scan(&o.ID, &o.Name, pq.Array(&o.Category), &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, pq.Array(&o.Gender), &o.DateTime) // читаем текст, категории и ссылку по умолчанию
+	).Scan(&o.ID, &o.Name, pq.Array(&o.Category), &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.Gender, &o.DateTime) // читаем текст, категории и ссылку по умолчанию
 	if err != nil {
 		return nil, err
 	}
@@ -232,8 +234,8 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 	}
 	defer tx.Rollback()
 
-	// Получаем все заказы и загружаем их в память, чтобы затем закрыть курсор
-	rows, err := tx.Query(`SELECT id, accounts_number_theory, accounts_number_fact, gender FROM orders`)
+	// Получаем заказы; gender приводим к text[], чтобы pq корректно прочитал массив
+	rows, err := tx.Query(`SELECT id, accounts_number_theory, accounts_number_fact, gender::text[] FROM orders`)
 	if err != nil {
 		log.Printf("[DB ERROR] выборка заказов: %v", err)
 		return err
@@ -251,7 +253,7 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 	// Считываем все заказы из курсора
 	for rows.Next() {
 		var o orderData
-		if err := rows.Scan(&o.id, &o.theory, &o.fact, pq.Array(&o.gender)); err != nil {
+		if err := rows.Scan(&o.id, &o.theory, &o.fact, &o.gender); err != nil {
 			log.Printf("[DB ERROR] чтение заказа: %v", err)
 			return err
 		}
