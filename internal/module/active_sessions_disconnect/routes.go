@@ -9,5 +9,6 @@ import (
 // SetupRoutes регистрирует маршруты для работы с активными сессиями.
 func SetupRoutes(r *gin.RouterGroup, db *storage.DB) {
 	handler := NewHandler(db)
-	r.GET("/info", handler.Info)
+	// Используем POST, чтобы соответствовать соглашению модульных маршрутов.
+	r.POST("/info", handler.Info)
 }
