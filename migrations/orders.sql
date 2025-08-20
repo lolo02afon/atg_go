@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS orders (
     id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- современный автоинкремент
     name TEXT NOT NULL,
-    category TEXT REFERENCES channels(name) DEFAULT NULL, -- Название категории из таблицы channels
+    category TEXT[] DEFAULT NULL, -- Массив категорий; корректность проверяется в приложении
     url_description TEXT NOT NULL, -- ссылка для описания аккаунта
     url_default TEXT NOT NULL, -- ссылка по умолчанию
     accounts_number_theory INTEGER NOT NULL,

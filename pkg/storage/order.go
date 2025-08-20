@@ -41,14 +41,36 @@ func (db *DB) CreateOrder(o models.Order) (*models.Order, error) {
 	}
 	defer tx.Rollback()
 
-	// Проверяем категорию только если она указана
-	if o.Category != nil {
-		var exists bool
-		if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM channels WHERE name = $1)`, *o.Category).Scan(&exists); err != nil {
+	// Проверяем существование всех указанных категорий, чтобы заказ не ссылался на неизвестные каналы
+	if len(o.Category) > 0 {
+		rows, err := tx.Query(`SELECT name FROM channels WHERE name = ANY($1)`, pq.Array(o.Category))
+		if err != nil {
 			return nil, err
 		}
-		if !exists {
-			return nil, fmt.Errorf("категория '%s' не найдена", *o.Category)
+		defer rows.Close()
+
+		// Собираем найденные категории в множество для быстрого сравнения
+		found := make(map[string]struct{})
+		for rows.Next() {
+			var name string
+			if err := rows.Scan(&name); err != nil {
+				return nil, err
+			}
+			found[name] = struct{}{}
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+
+		// Определяем, какие категории отсутствуют
+		var missing []string
+		for _, c := range o.Category {
+			if _, ok := found[c]; !ok {
+				missing = append(missing, c)
+			}
+		}
+		if len(missing) > 0 {
+			return nil, fmt.Errorf("категории %v не найдены", missing)
 		}
 	}
 
@@ -58,7 +80,7 @@ func (db *DB) CreateOrder(o models.Order) (*models.Order, error) {
 	// Вставляем запись о заказе вместе со ссылкой по умолчанию
 	err = tx.QueryRow(
 		`INSERT INTO orders (name, category, url_description, url_default, accounts_number_theory, gender) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, accounts_number_fact, date_time`,
-		o.Name, o.Category, o.URLDescription, o.URLDefault, o.AccountsNumberTheory, pq.Array(gender),
+		o.Name, pq.Array(o.Category), o.URLDescription, o.URLDefault, o.AccountsNumberTheory, pq.Array(gender),
 	).Scan(&o.ID, &o.AccountsNumberFact, &o.DateTime)
 	if err != nil {
 		return nil, err
@@ -104,19 +126,15 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 	defer tx.Rollback()
 
 	var o models.Order
-	var category sql.NullString
 	err = tx.QueryRow(
 		`SELECT id, name, category, url_description, url_default, accounts_number_theory, accounts_number_fact, gender, date_time FROM orders WHERE id = $1`,
 		orderID,
-	).Scan(&o.ID, &o.Name, &category, &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, pq.Array(&o.Gender), &o.DateTime) // читаем текст, категорию и ссылку по умолчанию
+	).Scan(&o.ID, &o.Name, pq.Array(&o.Category), &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, pq.Array(&o.Gender), &o.DateTime) // читаем текст, категории и ссылку по умолчанию
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, err
 		}
 		return nil, err
-	}
-	if category.Valid {
-		o.Category = &category.String
 	}
 
 	if _, err := tx.Exec(`UPDATE orders SET accounts_number_theory = $1 WHERE id = $2`, newNumber, orderID); err != nil {
@@ -194,16 +212,12 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 // Используется для получения ссылки при обновлении описаний аккаунтов
 func (db *DB) GetOrderByID(id int) (*models.Order, error) {
 	var o models.Order
-	var category sql.NullString
 	err := db.Conn.QueryRow(
 		`SELECT id, name, category, url_description, url_default, accounts_number_theory, accounts_number_fact, gender, date_time FROM orders WHERE id = $1`,
 		id,
-	).Scan(&o.ID, &o.Name, &category, &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, pq.Array(&o.Gender), &o.DateTime) // читаем текст, категорию и ссылку по умолчанию
+	).Scan(&o.ID, &o.Name, pq.Array(&o.Category), &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, pq.Array(&o.Gender), &o.DateTime) // читаем текст, категории и ссылку по умолчанию
 	if err != nil {
 		return nil, err
-	}
-	if category.Valid {
-		o.Category = &category.String
 	}
 	return &o, nil
 }
