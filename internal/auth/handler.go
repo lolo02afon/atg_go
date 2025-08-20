@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"database/sql"
+	"errors"
 	"log"
 
 	"atg_go/models"
@@ -78,12 +80,24 @@ func (h *AccountHandler) VerifyAccount(c *gin.Context) {
 		return
 	}
 
-	// Получаем последнюю запись аккаунта
+	// Получаем последнюю запись аккаунта и фиксируем первичную ошибку
 	account, err := h.DB.GetLastAccount()
 	if err != nil {
-		c.JSON(404, gin.H{"error": "Account not found"})
+		if errors.Is(err, sql.ErrNoRows) {
+			// Логируем отсутствие данных, чтобы понимать, что таблица пуста
+			log.Printf("[WARN] В БД нет аккаунтов: %v", err)
+			c.JSON(404, gin.H{"error": "Account not found"})
+			return
+		}
+
+		// Логируем неожиданную ошибку, чтобы понимать, что сломалось при выборке
+		log.Printf("[ERROR] Не удалось получить последний аккаунт: %v", err)
+		c.JSON(500, gin.H{"error": "DB error"})
 		return
 	}
+
+	// Фиксируем ID выбранного аккаунта, чтобы убедиться, что берём именно его
+	log.Printf("[INFO] Проверяем аккаунт с ID=%d", account.ID)
 
 	// Если последний аккаунт уже авторизован, сообщаем об этом
 	if account.IsAuthorized {
