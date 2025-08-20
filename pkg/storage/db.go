@@ -98,8 +98,9 @@ func (db *DB) GetAccountByID(id int) (*models.Account, error) {
 		proxyActive   sql.NullBool
 	)
 
+	// Приводим gender к text[], чтобы можно было сканировать напрямую без вспомогательных типов
 	query := `
-              SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.gender, a.proxy_id, a.order_id,
+              SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.gender::text[], a.proxy_id, a.order_id,
                      p.id, p.ip, p.port, p.login, p.password, p.ipv6, p.account_count, p.is_active
               FROM accounts a
               LEFT JOIN proxy p ON a.proxy_id = p.id
@@ -112,7 +113,7 @@ func (db *DB) GetAccountByID(id int) (*models.Account, error) {
 		&account.ApiHash,
 		&account.PhoneCodeHash,
 		&account.IsAuthorized,
-		pq.Array(&account.Gender),
+		&account.Gender, // драйвер сам преобразует массив text[] в срез строк
 		&account.ProxyID,
 		&account.OrderID,
 		&proxyID,
@@ -172,8 +173,9 @@ func (db *DB) GetLastAccount() (*models.Account, error) {
 		proxyActive   sql.NullBool
 	)
 
+	// Каст к text[] избавляет от необходимости использовать pq.Array при чтении
 	query := `
-              SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.gender, a.proxy_id, a.order_id,
+              SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.gender::text[], a.proxy_id, a.order_id,
                      p.id, p.ip, p.port, p.login, p.password, p.ipv6, p.account_count, p.is_active
               FROM accounts a
               LEFT JOIN proxy p ON a.proxy_id = p.id
@@ -189,7 +191,7 @@ func (db *DB) GetLastAccount() (*models.Account, error) {
 		&account.ApiHash,
 		&account.PhoneCodeHash,
 		&account.IsAuthorized,
-		pq.Array(&account.Gender),
+		&account.Gender, // массив читается напрямую
 		&account.ProxyID,
 		&account.OrderID,
 		&proxyID,
@@ -265,8 +267,9 @@ func (db *DB) GetAccountByPhone(phone string) (*models.Account, error) {
 		proxyActive   sql.NullBool
 	)
 
+	// Кастомное приведение gender к text[] упрощает чтение из массива
 	query := `
-       SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.gender, a.proxy_id, a.order_id,
+       SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.gender::text[], a.proxy_id, a.order_id,
               p.id, p.ip, p.port, p.login, p.password, p.ipv6, p.account_count, p.is_active
        FROM accounts a
        LEFT JOIN proxy p ON a.proxy_id = p.id
@@ -279,7 +282,7 @@ func (db *DB) GetAccountByPhone(phone string) (*models.Account, error) {
 		&account.ApiHash,
 		&account.PhoneCodeHash,
 		&account.IsAuthorized,
-		pq.Array(&account.Gender),
+		&account.Gender, // используем прямое сканирование массива
 		&account.ProxyID,
 		&account.OrderID,
 		&proxyID,
@@ -337,9 +340,9 @@ func (db *DB) AssignProxyToAccount(accountID, proxyID int, limit int) error {
 
 // возвращает все авторизованные аккаунты
 func (db *DB) GetAuthorizedAccounts() ([]models.Account, error) {
-	// Запрос для выборки авторизованных аккаунтов
+	// Запрос для выборки авторизованных аккаунтов; gender приводим к text[] для простого чтения
 	query := `
-       SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.gender, a.proxy_id, a.order_id,
+       SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.gender::text[], a.proxy_id, a.order_id,
               p.id, p.ip, p.port, p.login, p.password, p.ipv6, p.account_count, p.is_active
        FROM accounts a
        LEFT JOIN proxy p ON a.proxy_id = p.id
@@ -381,7 +384,7 @@ func (db *DB) GetAuthorizedAccounts() ([]models.Account, error) {
 			&account.ApiHash,
 			&account.PhoneCodeHash,
 			&account.IsAuthorized,
-			pq.Array(&account.Gender),
+			&account.Gender, // driver преобразует text[] в []string
 			&accountProxyID,
 			&accountOrderID,
 			&proxyID,
