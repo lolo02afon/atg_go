@@ -19,7 +19,9 @@ func NewHandler(db *storage.DB) *Handler {
 	return &Handler{DB: db}
 }
 
-// Info вызывает вывод в журнал всех активных сессий аккаунтов.
+// Info выводит в журнал активные сессии нескольких случайных
+// (до пяти) авторизованных аккаунтов, чтобы контролировать объём
+// логов и при этом иметь представление о разных пользователях.
 func (h *Handler) Info(c *gin.Context) {
 	if err := telegrammodule.LogAuthorizations(h.DB); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
