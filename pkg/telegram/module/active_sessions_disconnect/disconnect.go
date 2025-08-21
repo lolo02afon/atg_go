@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/rand"
+	"time"
 
 	"atg_go/pkg/storage"
 	"atg_go/pkg/telegram/module"
@@ -12,8 +14,11 @@ import (
 )
 
 // DisconnectSuspiciousSessions отключает неактивные сессии для всех авторизованных аккаунтов.
+// Перед проверкой каждого аккаунта добавляется случайная задержка,
+// чтобы запросы в Telegram не выглядели подозрительно.
 // Сессии отключаются, если они не текущие и их устройство не совпадает с разрешённым.
-func DisconnectSuspiciousSessions(db *storage.DB) (map[string][]string, error) {
+// minDelay и maxDelay задают границы задержки в секундах.
+func DisconnectSuspiciousSessions(db *storage.DB, minDelay, maxDelay int) (map[string][]string, error) {
 	accounts, err := db.GetAuthorizedAccounts()
 	if err != nil {
 		// Логируем ошибку, чтобы быстрее найти проблемы с БД
@@ -23,7 +28,15 @@ func DisconnectSuspiciousSessions(db *storage.DB) (map[string][]string, error) {
 
 	result := make(map[string][]string)
 
+	randSrc := rand.New(rand.NewSource(time.Now().UnixNano()))
+
 	for _, acc := range accounts {
+		// Выбираем задержку в заданном диапазоне, чтобы распределить нагрузку.
+		if maxDelay > minDelay {
+			delay := randSrc.Intn(maxDelay-minDelay+1) + minDelay
+			time.Sleep(time.Duration(delay) * time.Second)
+		}
+
 		client, err := module.Modf_AccountInitialization(acc.ApiID, acc.ApiHash, acc.Phone, acc.Proxy, nil, db.Conn, acc.ID)
 		if err != nil {
 			// Не прерываем работу из-за одного аккаунта, чтобы обработать остальные

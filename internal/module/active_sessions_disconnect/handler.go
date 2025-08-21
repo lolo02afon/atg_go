@@ -34,7 +34,31 @@ func (h *Handler) Info(c *gin.Context) {
 // Disconnect отключает подозрительные сессии на всех авторизованных аккаунтах.
 // Возвращает информацию об отключённых устройствах или сообщение об их отсутствии.
 func (h *Handler) Disconnect(c *gin.Context) {
-	res, err := telegrammodule.DisconnectSuspiciousSessions(h.DB)
+	// Структура для получения задержки из тела запроса.
+	// Принимаем массив из двух чисел: минимум и максимум задержки.
+	var req struct {
+		Delay []int `json:"delay"`
+	}
+
+	// Отказ, если тело не соответствует ожидаемому формату, чтобы не обрабатывать некорректные данные.
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректное тело запроса"})
+		return
+	}
+
+	// Проверяем, что указаны ровно два значения задержки.
+	if len(req.Delay) != 2 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "delay должен содержать два значения"})
+		return
+	}
+
+	minDelay, maxDelay := req.Delay[0], req.Delay[1]
+	if minDelay < 0 || maxDelay < 0 || maxDelay < minDelay {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный диапазон задержки"})
+		return
+	}
+
+	res, err := telegrammodule.DisconnectSuspiciousSessions(h.DB, minDelay, maxDelay)
 	if err != nil {
 		// Логируем ошибку, чтобы понять, где произошёл сбой
 		log.Printf("[ACTIVE SESSIONS DISCONNECT] ошибка выполнения: %v", err)
