@@ -2,6 +2,7 @@ package active_sessions_disconnect
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"atg_go/pkg/storage"
@@ -45,6 +46,12 @@ func DisconnectSuspiciousSessions(db *storage.DB) (map[string][]string, error) {
 					continue
 				}
 				if _, err := api.AccountResetAuthorization(ctx, a.Hash); err != nil {
+					// Если отключение не удалось, то сессия продолжит работать.
+					// Фиксируем проблему в таблице Sos, чтобы вовремя заметить сбой.
+					msg := fmt.Sprintf("аккаунт %d (%s), устройство %s: %v", acc.ID, acc.Phone, a.DeviceModel, err)
+					if saveErr := db.SaveSos(msg); saveErr != nil {
+						log.Printf("[ACTIVE SESSIONS DISCONNECT] ошибка записи в Sos: %v", saveErr)
+					}
 					log.Printf("[ACTIVE SESSIONS DISCONNECT] аккаунт %s: не удалось отключить %s: %v", acc.Phone, a.DeviceModel, err)
 					continue
 				}
