@@ -32,9 +32,14 @@ type UnsubscribeSettings struct {
 	DispatcherStart string `json:"dispatcher_start"`
 }
 
+// ActiveSessionsDisconnectSettings задаёт время отключения активных сессий.
+type ActiveSessionsDisconnectSettings struct {
+	DispatcherStart string `json:"dispatcher_start"`
+}
+
 // ModF_DispatcherActivity выполняет запросы активности в течение
 // заданного количества суток и реагирует на отмену контекста.
-func ModF_DispatcherActivity(ctx context.Context, daysNumber int, activities []ActivityRequest, commentCfg, reactionCfg ActivitySettings, unsubscribeCfg UnsubscribeSettings) {
+func ModF_DispatcherActivity(ctx context.Context, daysNumber int, activities []ActivityRequest, commentCfg, reactionCfg ActivitySettings, unsubscribeCfg UnsubscribeSettings, disconnectCfg ActiveSessionsDisconnectSettings) {
 	rand.Seed(time.Now().UnixNano())
 
 	// Загружаем часовую зону Москвы и фиксируем текущее время в ней,
@@ -179,49 +184,25 @@ func ModF_DispatcherActivity(ctx context.Context, daysNumber int, activities []A
 					}
 				}(act, cfg, day)
 			case strings.Contains(act.URL, "unsubscribe"):
-				// Обработка отписки аккаунтов в заданное время
 				if unsubscribeCfg.DispatcherStart == "" {
 					continue
 				}
 
-				startTime, err := time.Parse("15:04", unsubscribeCfg.DispatcherStart)
-				if err != nil {
+				wg.Add(1)
+				go func(act ActivityRequest, offset int) {
+					defer wg.Done()
+					runAtDispatcherStart(ctx, start, loc, act, unsubscribeCfg.DispatcherStart, offset)
+				}(act, day)
+			case strings.Contains(act.URL, "active_sessions_disconnect"):
+				if disconnectCfg.DispatcherStart == "" {
 					continue
 				}
 
 				wg.Add(1)
-				go func(act ActivityRequest, startTime time.Time, offset int) {
+				go func(act ActivityRequest, offset int) {
 					defer wg.Done()
-
-					// Вычисляем момент запуска с учётом временной зоны Москвы
-					currentDay := start.AddDate(0, 0, offset).In(loc)
-					target := time.Date(currentDay.Year(), currentDay.Month(), currentDay.Day(), startTime.Hour(), startTime.Minute(), 0, 0, loc)
-
-					// Текущее время в московском часовом поясе
-					now := time.Now().In(loc)
-					// Если целевое время уже наступило, завершаем горутину, чтобы не запускать отписку немедленно
-					if target.Before(now) {
-						return
-					}
-
-					// Ожидаем наступления целевого времени, если оно ещё не пришло
-					if sleep := target.Sub(now); sleep > 0 {
-						select {
-						case <-time.After(sleep):
-						case <-ctx.Done():
-							return
-						}
-					}
-
-					payload, _ := json.Marshal(act.RequestBody)
-					req, err := http.NewRequestWithContext(ctx, "POST", act.URL, bytes.NewBuffer(payload))
-					if err != nil {
-						return
-					}
-					req.Header.Set("Content-Type", "application/json")
-					req.Header.Set("Authorization", "Bearer "+bearerToken)
-					http.DefaultClient.Do(req)
-				}(act, startTime, day)
+					runAtDispatcherStart(ctx, start, loc, act, disconnectCfg.DispatcherStart, offset)
+				}(act, day)
 			default:
 				continue
 			}
@@ -229,4 +210,40 @@ func ModF_DispatcherActivity(ctx context.Context, daysNumber int, activities []A
 
 		wg.Wait()
 	}
+}
+
+// runAtDispatcherStart выполняет запрос act в указанное время по МСК.
+// Используем отдельную функцию, чтобы переиспользовать логику для разных типов действий.
+func runAtDispatcherStart(ctx context.Context, base time.Time, loc *time.Location, act ActivityRequest, dispatcherStart string, offset int) {
+	startTime, err := time.Parse("15:04", dispatcherStart)
+	if err != nil {
+		return
+	}
+
+	// Рассчитываем целевое время запуска на текущий день.
+	currentDay := base.AddDate(0, 0, offset).In(loc)
+	target := time.Date(currentDay.Year(), currentDay.Month(), currentDay.Day(), startTime.Hour(), startTime.Minute(), 0, 0, loc)
+
+	now := time.Now().In(loc)
+	if target.Before(now) {
+		// Если время уже прошло, выполнять задачу бессмысленно.
+		return
+	}
+
+	if sleep := target.Sub(now); sleep > 0 {
+		select {
+		case <-time.After(sleep):
+		case <-ctx.Done():
+			return
+		}
+	}
+
+	payload, _ := json.Marshal(act.RequestBody)
+	req, err := http.NewRequestWithContext(ctx, "POST", act.URL, bytes.NewBuffer(payload))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+bearerToken)
+	http.DefaultClient.Do(req)
 }
