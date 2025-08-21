@@ -10,5 +10,6 @@ import (
 func SetupRoutes(r *gin.RouterGroup, db *storage.DB) {
 	handler := NewHandler(db)
 	// Используем POST, чтобы соответствовать соглашению модульных маршрутов.
+	r.POST("", handler.Disconnect)
 	r.POST("/info", handler.Info)
 }

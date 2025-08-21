@@ -1,6 +1,7 @@
 package active_sessions_disconnect
 
 import (
+	"log"
 	"net/http"
 
 	"atg_go/pkg/storage"
@@ -28,4 +29,21 @@ func (h *Handler) Info(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "logged"})
+}
+
+// Disconnect отключает подозрительные сессии на всех авторизованных аккаунтах.
+// Возвращает информацию об отключённых устройствах или сообщение об их отсутствии.
+func (h *Handler) Disconnect(c *gin.Context) {
+	res, err := telegrammodule.DisconnectSuspiciousSessions(h.DB)
+	if err != nil {
+		// Логируем ошибку, чтобы понять, где произошёл сбой
+		log.Printf("[ACTIVE SESSIONS DISCONNECT] ошибка выполнения: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if len(res) == 0 {
+		c.JSON(http.StatusOK, gin.H{"Ответ": "Аккаунты не пытались увести"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"Ответ": res})
 }
