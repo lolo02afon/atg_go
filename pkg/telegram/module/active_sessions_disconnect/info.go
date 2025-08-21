@@ -13,9 +13,9 @@ import (
 )
 
 // LogAuthorizations выводит в журнал данные активных сессий
-// случайного авторизованного аккаунта. Это позволяет не захламлять
-// логи данными всех аккаунтов одновременно и сразу видеть телефон
-// выбранного аккаунта.
+// нескольких случайных (до пяти) авторизованных аккаунтов. Такой
+// подход ограничивает объём логов и всё же даёт понимание о сессиях
+// разных пользователей.
 func LogAuthorizations(db *storage.DB) error {
 	accounts, err := db.GetAuthorizedAccounts()
 	if err != nil {
@@ -25,31 +25,40 @@ func LogAuthorizations(db *storage.DB) error {
 		return nil
 	}
 
-	// Выбираем один аккаунт случайным образом, чтобы контролировать объём логов
+	// Перемешиваем список, чтобы выбранные аккаунты были случайными
 	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
-	acc := accounts[rnd.Intn(len(accounts))]
+	rnd.Shuffle(len(accounts), func(i, j int) { accounts[i], accounts[j] = accounts[j], accounts[i] })
 
-	// Инициализируем клиента Telegram для выбранного аккаунта
-	client, err := module.Modf_AccountInitialization(acc.ApiID, acc.ApiHash, acc.Phone, acc.Proxy, nil, db.Conn, acc.ID)
-	if err != nil {
-		log.Printf("[ACTIVE SESSIONS] аккаунт %d (%s): ошибка инициализации: %v", acc.ID, acc.Phone, err)
-		return nil
+	// Ограничиваем количество проверяемых аккаунтов пятью, чтобы не засорять логи
+	limit := 5
+	if len(accounts) < limit {
+		limit = len(accounts)
 	}
 
-	ctx := context.Background()
-	if err := client.Run(ctx, func(ctx context.Context) error {
-		api := tg.NewClient(client)
-		auths, err := api.AccountGetAuthorizations(ctx)
+	// Для каждого выбранного аккаунта инициализируем клиента и выводим его активные сессии
+	for _, acc := range accounts[:limit] {
+		client, err := module.Modf_AccountInitialization(acc.ApiID, acc.ApiHash, acc.Phone, acc.Proxy, nil, db.Conn, acc.ID)
 		if err != nil {
-			return err
+			// Не прерываем обработку остальных аккаунтов, чтобы увидеть информацию хотя бы по части из них
+			log.Printf("[ACTIVE SESSIONS] аккаунт %d (%s): ошибка инициализации: %v", acc.ID, acc.Phone, err)
+			continue
 		}
-		// Логируем каждую сессию отдельно, добавляя телефон для наглядности
-		for _, a := range auths.Authorizations {
-			log.Printf("[ACTIVE SESSIONS] аккаунт %d (%s): %+v", acc.ID, acc.Phone, a)
+
+		ctx := context.Background()
+		if err := client.Run(ctx, func(ctx context.Context) error {
+			api := tg.NewClient(client)
+			auths, err := api.AccountGetAuthorizations(ctx)
+			if err != nil {
+				return err
+			}
+			// Логируем каждую сессию отдельно, добавляя телефон для наглядности
+			for _, a := range auths.Authorizations {
+				log.Printf("[ACTIVE SESSIONS] аккаунт %d (%s): %+v", acc.ID, acc.Phone, a)
+			}
+			return nil
+		}); err != nil {
+			log.Printf("[ACTIVE SESSIONS] аккаунт %d (%s): ошибка получения сессий: %v", acc.ID, acc.Phone, err)
 		}
-		return nil
-	}); err != nil {
-		log.Printf("[ACTIVE SESSIONS] аккаунт %d (%s): ошибка получения сессий: %v", acc.ID, acc.Phone, err)
 	}
 	return nil
 }
