@@ -1,8 +1,8 @@
 package comments
 
 import (
+	"atg_go/internal/common"
 	"atg_go/internal/httputil"
-	"atg_go/models"
 	"atg_go/pkg/storage"
 	"atg_go/pkg/telegram"
 	"database/sql"
@@ -49,20 +49,13 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		return
 	}
 
-	// Оставляем только аккаунты, которые привязаны к заказу.
-	// Это важно, поскольку активность разрешена исключительно для аккаунтов,
-	// выполняющих заказ, чтобы избежать действий «свободных» аккаунтов.
-	var orderedAccounts []models.Account
-	for _, acc := range accounts {
-		if acc.OrderID != nil {
-			orderedAccounts = append(orderedAccounts, acc)
-		}
-	}
-	accounts = orderedAccounts
+	// Фильтруем аккаунты, оставляя только закреплённые за заказом.
+	accounts = common.FilterAccountsWithOrder(accounts)
 
+	// Если ни один аккаунт не найден, возвращаем единообразную ошибку.
 	if len(accounts) == 0 {
-		log.Printf("[HANDLER WARN] No authorized accounts with order found")
-		httputil.RespondError(c, http.StatusNotFound, "No authorized ordered accounts available")
+		log.Printf("[HANDLER WARN] %s", common.NoOrderedAccountsMessage)
+		httputil.RespondError(c, http.StatusNotFound, common.NoOrderedAccountsMessage)
 		return
 	}
 
