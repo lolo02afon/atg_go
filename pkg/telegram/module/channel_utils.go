@@ -116,38 +116,6 @@ func Modf_FindChannel(chats []tg.ChatClass) (*tg.Channel, error) {
 	return nil, fmt.Errorf("broadcast channel not found")
 }
 
-// выбирает случайный пост из канала
-func Modf_GetRandomChannelPost(ctx context.Context, api *tg.Client, channel *tg.Channel, limit int) (*tg.Message, error) {
-	history, err := api.MessagesGetHistory(ctx, &tg.MessagesGetHistoryRequest{
-		Peer: &tg.InputPeerChannel{
-			ChannelID:  channel.ID,
-			AccessHash: channel.AccessHash,
-		},
-		Limit: limit,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	messages, ok := history.(*tg.MessagesChannelMessages)
-	if !ok {
-		return nil, fmt.Errorf("unexpected messages type")
-	}
-
-	var validMessages []*tg.Message
-	for _, msg := range messages.Messages {
-		if m, ok := msg.(*tg.Message); ok {
-			validMessages = append(validMessages, m)
-		}
-	}
-
-	if len(validMessages) == 0 {
-		return nil, fmt.Errorf("no valid messages")
-	}
-
-	return validMessages[rand.Intn(len(validMessages))], nil
-}
-
 // Создаем клиент Telegram с указанными параметрами и хранилищем сессии в БД.
 func Modf_AccountInitialization(apiID int, apiHash, phone string, p *models.Proxy, r *rand.Rand, db *sql.DB, accountID int) (*telegram.Client, error) {
 	var storage session.Storage = &session.StorageMemory{}
