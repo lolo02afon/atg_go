@@ -5,7 +5,6 @@ import (
 	"atg_go/models"
 	"atg_go/pkg/storage"
 	"atg_go/pkg/telegram"
-	"database/sql"
 	"errors"
 	"log"
 	"math/rand"
@@ -95,14 +94,16 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 		}
 
 		// Выбор случайного канала
-		// Сужаем выборку каналов до категорий заказа, чтобы реакция попадала в нужную аудиторию.
-		channelURL, err := h.CommentDB.GetRandomChannel(*account.OrderID)
-		if errors.Is(err, sql.ErrNoRows) {
-			log.Printf("[HANDLER ERROR] Нет доступных каналов: %v", err)
-			httputil.RespondError(c, http.StatusNotFound, "No channels available")
-			return
-		}
+		// PickRandomChannel унифицирует ошибки и прячет детали получения канала.
+		channelURL, err := storage.PickRandomChannel(h.CommentDB, *account.OrderID)
 		if err != nil {
+			if errors.Is(err, storage.ErrNoChannel) {
+				// Нет подходящих каналов — дальнейшая отправка реакций бессмысленна.
+				log.Printf("[HANDLER ERROR] Нет доступных каналов: %v", err)
+				httputil.RespondError(c, http.StatusNotFound, "No channels available")
+				return
+			}
+			// Остальные ошибки логируем и учитываем в счётчике, чтобы не блокировать остальных.
 			log.Printf("[HANDLER ERROR] Ошибка выбора канала для %s: %v", account.Phone, err)
 			errorCount++
 			continue
