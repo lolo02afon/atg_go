@@ -1,6 +1,7 @@
 package reaction
 
 import (
+	"atg_go/internal/common"
 	"atg_go/internal/httputil"
 	"atg_go/models"
 	"atg_go/pkg/storage"
@@ -73,24 +74,18 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 	rand.Seed(time.Now().UnixNano())
 
 	for i, account := range accounts {
-		// Задержка между аккаунтами
+		// Задержка между аккаунтами позволяет распределить активность во времени.
 		if i > 0 {
-			delay := rand.Intn(10) + 6 // 6–15 секунд
-			log.Printf("[HANDLER] Аккаунт %s обработан. Ожидание %d секунд перед следующим...", accounts[i-1].Phone, delay)
-			for remaining := delay; remaining > 0; remaining -= 5 {
-				select {
-				case <-c.Request.Context().Done():
-					log.Printf("[HANDLER WARN] Request cancelled during delay")
-					c.JSON(http.StatusRequestTimeout, gin.H{
-						"status":     "Cancelled during delay",
-						"processed":  i,
-						"successful": successCount,
-						"failed":     errorCount,
-					})
-					return
-				default:
-				}
-				time.Sleep(5 * time.Second)
+			log.Printf("[HANDLER] Аккаунт %s обработан. Ожидание перед следующим...", accounts[i-1].Phone)
+			if err := common.WaitWithCancellation(c.Request.Context(), [2]int{6, 15}); err != nil {
+				log.Printf("[HANDLER WARN] Request cancelled during delay: %v", err)
+				c.JSON(http.StatusRequestTimeout, gin.H{
+					"status":     "Cancelled during delay",
+					"processed":  i,
+					"successful": successCount,
+					"failed":     errorCount,
+				})
+				return
 			}
 		}
 
