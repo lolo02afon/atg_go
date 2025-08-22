@@ -1,15 +1,14 @@
 package comments
 
 import (
+	"atg_go/internal/activity"
 	"atg_go/internal/common"
 	"atg_go/internal/httputil"
+	"atg_go/models"
 	"atg_go/pkg/storage"
 	"atg_go/pkg/telegram"
-	"errors"
 	"log"
-	"math/rand"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -58,12 +57,6 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		return
 	}
 
-	// Счётчики успешных и неуспешных попыток
-	var successCount, errorCount int
-
-	// Инициализируем генератор случайных чисел
-	rand.Seed(time.Now().UnixNano())
-
 	// Собираем ID наших аккаунтов в Telegram
 	var userIDs []int
 	for _, acc := range accounts {
@@ -74,40 +67,7 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 		}
 		userIDs = append(userIDs, id)
 	}
-	for i, account := range accounts {
-		// Задержка между аккаунтами нужна, чтобы не создавать всплеск активности.
-		if i > 0 {
-			log.Printf("[HANDLER] Аккаунт %s обработан. Ожидание перед следующим...", accounts[i-1].Phone)
-			if err := common.WaitWithCancellation(c.Request.Context(), [2]int{6, 15}); err != nil {
-				log.Printf("[HANDLER WARN] Request cancelled during delay: %v", err)
-				c.JSON(http.StatusRequestTimeout, gin.H{
-					"status":     "Cancelled during delay",
-					"processed":  i,
-					"successful": successCount,
-					"failed":     errorCount,
-				})
-				return
-			}
-		}
-
-		// --- Выбор канала для каждого аккаунта ---
-		// Преобразование ошибок внутри PickRandomChannel избавляет от дублирования проверок.
-		channelURL, err := storage.PickRandomChannel(h.CommentDB, *account.OrderID)
-		if err != nil {
-			if errors.Is(err, storage.ErrNoChannel) {
-				// Отсутствие канала означает, что выполнять заказ больше негде.
-				log.Printf("[HANDLER ERROR] No channels available: %v", err)
-				httputil.RespondError(c, http.StatusNotFound, "No channels available")
-				return
-			}
-			// Любые другие ошибки считаем временными и идём дальше, фиксируя счётчик.
-			log.Printf("[HANDLER ERROR] Channel selection failed for %s: %v", account.Phone, err)
-			errorCount++
-			continue
-		}
-		log.Printf("[HANDLER INFO] Selected channel for %s: %s", account.Phone, channelURL)
-
-		// Отправка комментария в выбранный канал
+	successCount, errorCount, err := activity.ProcessAccounts(c, accounts, h.CommentDB, func(account models.Account, channelURL string) (bool, error) {
 		msgID, _, err := telegram.SendComment(
 			h.DB,
 			account.ID,
@@ -117,7 +77,6 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 			account.ApiHash,
 			request.PostsCount,
 			func(channelID, messageID int) (bool, error) {
-
 				exists, err := h.DB.HasCommentForPost(channelID, messageID)
 				if err != nil {
 					return false, err
@@ -128,16 +87,17 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 			account.Proxy,
 		)
 		if err != nil {
-			log.Printf("[HANDLER ERROR] Failed for %s: %v", account.Phone, err)
-			errorCount++
-			continue
+			return false, err
 		}
 		if msgID == 0 {
 			log.Printf("[HANDLER INFO] На пост уже оставлен комментарий, пропуск для %s", account.Phone)
-			continue
+			return false, nil
 		}
-
-		successCount++
+		return true, nil
+	})
+	if err != nil {
+		// Процессор уже отправил ответ клиенту, поэтому просто прекращаем обработку.
+		return
 	}
 
 	// Итоговый ответ (канал убран, т.к. каждый повтор выбирался свой)

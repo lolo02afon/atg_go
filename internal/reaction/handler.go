@@ -1,15 +1,14 @@
 package reaction
 
 import (
+	"atg_go/internal/activity"
 	"atg_go/internal/common"
 	"atg_go/internal/httputil"
+	"atg_go/models"
 	"atg_go/pkg/storage"
 	"atg_go/pkg/telegram"
-	"errors"
 	"log"
-	"math/rand"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -60,44 +59,7 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 		return
 	}
 
-	// Счётчики
-	var successCount, errorCount int
-
-	rand.Seed(time.Now().UnixNano())
-
-	for i, account := range accounts {
-		// Задержка между аккаунтами позволяет распределить активность во времени.
-		if i > 0 {
-			log.Printf("[HANDLER] Аккаунт %s обработан. Ожидание перед следующим...", accounts[i-1].Phone)
-			if err := common.WaitWithCancellation(c.Request.Context(), [2]int{6, 15}); err != nil {
-				log.Printf("[HANDLER WARN] Request cancelled during delay: %v", err)
-				c.JSON(http.StatusRequestTimeout, gin.H{
-					"status":     "Cancelled during delay",
-					"processed":  i,
-					"successful": successCount,
-					"failed":     errorCount,
-				})
-				return
-			}
-		}
-
-		// Выбор случайного канала
-		// PickRandomChannel унифицирует ошибки и прячет детали получения канала.
-		channelURL, err := storage.PickRandomChannel(h.CommentDB, *account.OrderID)
-		if err != nil {
-			if errors.Is(err, storage.ErrNoChannel) {
-				// Нет подходящих каналов — дальнейшая отправка реакций бессмысленна.
-				log.Printf("[HANDLER ERROR] Нет доступных каналов: %v", err)
-				httputil.RespondError(c, http.StatusNotFound, "No channels available")
-				return
-			}
-			// Остальные ошибки логируем и учитываем в счётчике, чтобы не блокировать остальных.
-			log.Printf("[HANDLER ERROR] Ошибка выбора канала для %s: %v", account.Phone, err)
-			errorCount++
-			continue
-		}
-		log.Printf("[HANDLER INFO] Выбран канал для %s: %s", account.Phone, channelURL)
-
+	successCount, errorCount, err := activity.ProcessAccounts(c, accounts, h.CommentDB, func(account models.Account, channelURL string) (bool, error) {
 		msgID, _, err := telegram.SendReaction(
 			h.DB,
 			account.ID,
@@ -110,16 +72,18 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 		)
 
 		if err != nil {
-			log.Printf("[HANDLER ERROR] Ошибка отправки реакции для %s: %v", account.Phone, err)
-			errorCount++
-			continue
+			return false, err
 		}
 		if msgID == 0 {
 			log.Printf("[HANDLER INFO] Не найдено подходящих сообщений для аккаунта %s", account.Phone)
-			continue
+			return false, nil
 		}
 
-		successCount++
+		return true, nil
+	})
+	if err != nil {
+		// Ответ уже отправлен внутри обработчика, поэтому завершаем выполнение.
+		return
 	}
 
 	result := gin.H{
