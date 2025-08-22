@@ -1,4 +1,4 @@
-package telegram
+package reaction
 
 import (
 	"testing"
