@@ -3,7 +3,6 @@ package reaction
 import (
 	"atg_go/internal/common"
 	"atg_go/internal/httputil"
-	"atg_go/models"
 	"atg_go/pkg/storage"
 	"atg_go/pkg/telegram"
 	"errors"
@@ -51,19 +50,13 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 		return
 	}
 
-	// Фильтруем аккаунты, оставляя только те, что закреплены за заказом.
-	// Так мы предотвращаем участие свободных аккаунтов в активности.
-	var orderedAccounts []models.Account
-	for _, acc := range accounts {
-		if acc.OrderID != nil {
-			orderedAccounts = append(orderedAccounts, acc)
-		}
-	}
-	accounts = orderedAccounts
+	// Отбрасываем свободные аккаунты, оставляя только привязанные к заказу.
+	accounts = common.FilterAccountsWithOrder(accounts)
 
+	// Унифицированная обработка отсутствия подходящих аккаунтов.
 	if len(accounts) == 0 {
-		log.Printf("[HANDLER WARN] Нет авторизованных аккаунтов с заказом")
-		httputil.RespondError(c, http.StatusNotFound, "No authorized ordered accounts available")
+		log.Printf("[HANDLER WARN] %s", common.NoOrderedAccountsMessage)
+		httputil.RespondError(c, http.StatusNotFound, common.NoOrderedAccountsMessage)
 		return
 	}
 
