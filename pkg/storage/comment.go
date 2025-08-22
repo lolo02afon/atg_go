@@ -4,6 +4,7 @@ import (
 	"atg_go/models"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log"
 	"math/rand"
 	"time"
@@ -18,6 +19,11 @@ type CommentDB struct {
 func NewCommentDB(conn *sql.DB) *CommentDB {
 	return &CommentDB{Conn: conn}
 }
+
+// ErrNoChannel сообщает, что в базе нет ни одного канала,
+// подходящего под категории заказа.
+// Такое выделение ошибки позволяет обработчикам выдавать 404 и не шуметь в логах.
+var ErrNoChannel = errors.New("no channel for order")
 
 // GetRandomChannel выбирает случайный URL из каналов, подходящих под категории заказа.
 // Мы фильтруем по заказу, чтобы аккаунт не отправлял активность в чужие тематики.
@@ -65,5 +71,21 @@ func (cdb *CommentDB) GetRandomChannel(orderID int) (string, error) {
 	url := channel.URLs[rand.Intn(len(channel.URLs))]
 	log.Printf("[DB] выбран канал %s для заказа %d", url, orderID)
 
+	return url, nil
+}
+
+// PickRandomChannel выбирает канал для отправки, если это возможно.
+// Возвращаемая ошибка приводит sql.ErrNoRows к ErrNoChannel, чтобы вызовы вне
+// пакета знали, когда каналов нет, и могли корректно ответить 404.
+func PickRandomChannel(commentDB *CommentDB, orderID int) (string, error) {
+	url, err := commentDB.GetRandomChannel(orderID)
+	if errors.Is(err, sql.ErrNoRows) {
+		// Преобразуем стандартную ошибку отсутствия строки в доменную
+		// ErrNoChannel, чтобы не раскрывать детали хранилища наружу.
+		return "", ErrNoChannel
+	}
+	if err != nil {
+		return "", err
+	}
 	return url, nil
 }
