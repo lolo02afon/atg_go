@@ -1,6 +1,7 @@
 package reaction
 
 import (
+	"atg_go/internal/httputil"
 	"atg_go/models"
 	"atg_go/pkg/storage"
 	"atg_go/pkg/telegram"
@@ -38,7 +39,7 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&request); err != nil {
 		log.Printf("[HANDLER ERROR] Неверный формат запроса: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		httputil.RespondError(c, http.StatusBadRequest, "Invalid request format")
 		return
 	}
 
@@ -46,7 +47,7 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 	accounts, err := h.DB.GetAuthorizedAccounts()
 	if err != nil {
 		log.Printf("[HANDLER ERROR] Ошибка получения аккаунтов: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get accounts"})
+		httputil.RespondError(c, http.StatusInternalServerError, "Failed to get accounts")
 		return
 	}
 
@@ -62,7 +63,7 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 
 	if len(accounts) == 0 {
 		log.Printf("[HANDLER WARN] Нет авторизованных аккаунтов с заказом")
-		c.JSON(http.StatusNotFound, gin.H{"error": "No authorized ordered accounts available"})
+		httputil.RespondError(c, http.StatusNotFound, "No authorized ordered accounts available")
 		return
 	}
 
@@ -98,7 +99,7 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 		channelURL, err := h.CommentDB.GetRandomChannel(*account.OrderID)
 		if errors.Is(err, sql.ErrNoRows) {
 			log.Printf("[HANDLER ERROR] Нет доступных каналов: %v", err)
-			c.JSON(http.StatusNotFound, gin.H{"error": "No channels available"})
+			httputil.RespondError(c, http.StatusNotFound, "No channels available")
 			return
 		}
 		if err != nil {

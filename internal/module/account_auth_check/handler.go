@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 
+	"atg_go/internal/httputil"
 	"atg_go/pkg/storage"
 	authcheck "atg_go/pkg/telegram/module/account_auth_check"
 
@@ -26,7 +27,7 @@ func (h *Handler) Check(c *gin.Context) {
 	accounts, err := h.DB.GetAuthorizedAccounts()
 	if err != nil {
 		log.Printf("[ACCOUNT AUTH CHECK] ошибка получения аккаунтов: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httputil.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 

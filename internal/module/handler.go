@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sync"
 
+	"atg_go/internal/httputil"
 	"atg_go/pkg/storage"
 	telegrammodule "atg_go/pkg/telegram/module"
 
@@ -40,7 +41,7 @@ func (h *Handler) DispatcherActivity(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		httputil.RespondError(c, http.StatusBadRequest, "Invalid request format")
 		return
 	}
 
@@ -102,17 +103,17 @@ func (h *Handler) Unsubscribe(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "неверный формат запроса"})
+		httputil.RespondError(c, http.StatusBadRequest, "неверный формат запроса")
 		return
 	}
 
 	if len(req.Delay) != 2 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "delay должен содержать два значения"})
+		httputil.RespondError(c, http.StatusBadRequest, "delay должен содержать два значения")
 		return
 	}
 
 	if req.NumberChannelsOrGroups < 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "number_channels_or_groups должен быть неотрицательным числом"})
+		httputil.RespondError(c, http.StatusBadRequest, "number_channels_or_groups должен быть неотрицательным числом")
 		return
 	}
 
@@ -120,7 +121,7 @@ func (h *Handler) Unsubscribe(c *gin.Context) {
 	log.Printf("[UNSUBSCRIBE] запрос: delay=%v, count=%d", delayRange, req.NumberChannelsOrGroups)
 
 	if err := telegrammodule.ModF_UnsubscribeAll(h.DB, delayRange, req.NumberChannelsOrGroups); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httputil.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "completed"})
@@ -130,7 +131,7 @@ func (h *Handler) Unsubscribe(c *gin.Context) {
 func (h *Handler) OrderLinkUpdate(c *gin.Context) {
 	if err := telegrammodule.Modf_OrderLinkUpdate(h.DB); err != nil {
 		log.Printf("[HANDLER ERROR] обновление ссылок: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httputil.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "links updated"})

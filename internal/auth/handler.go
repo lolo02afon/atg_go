@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 
+	"atg_go/internal/httputil"
 	"atg_go/models"
 	"atg_go/pkg/storage"
 	telegram "atg_go/pkg/telegram"
@@ -23,7 +24,7 @@ func NewHandler(db *storage.DB) *AccountHandler {
 func (h *AccountHandler) CreateAccount(c *gin.Context) {
 	var account models.Account
 	if err := c.ShouldBindJSON(&account); err != nil {
-		c.JSON(400, gin.H{"error": "Invalid data"})
+		httputil.RespondError(c, 400, "Invalid data")
 		return
 	}
 	// Обнуляем ID, чтобы БД назначила его автоматически
@@ -33,11 +34,11 @@ func (h *AccountHandler) CreateAccount(c *gin.Context) {
 	if account.ProxyID != nil {
 		p, err := h.DB.GetProxyByID(*account.ProxyID)
 		if err != nil {
-			c.JSON(400, gin.H{"error": "Proxy not found"})
+			httputil.RespondError(c, 400, "Proxy not found")
 			return
 		}
 		if p.AccountsCount >= 30 {
-			c.JSON(400, gin.H{"error": "Proxy limit reached"})
+			httputil.RespondError(c, 400, "Proxy limit reached")
 			return
 		}
 		proxy = p
@@ -46,7 +47,7 @@ func (h *AccountHandler) CreateAccount(c *gin.Context) {
 	// Проверяем соединение с БД перед созданием аккаунта
 	if err := h.DB.Conn.PingContext(c.Request.Context()); err != nil {
 		log.Printf("[ERROR] Соединение с БД недоступно: %v", err)
-		c.JSON(500, gin.H{"error": "DB connection error"})
+		httputil.RespondError(c, 500, "DB connection error")
 		return
 	}
 
@@ -54,14 +55,14 @@ func (h *AccountHandler) CreateAccount(c *gin.Context) {
 	created, err := h.DB.CreateAccount(account)
 	if err != nil {
 		log.Printf("[ERROR] Не удалось создать аккаунт в БД: %v", err)
-		c.JSON(500, gin.H{"error": "DB error"})
+		httputil.RespondError(c, 500, "DB error")
 		return
 	}
 
 	// Отправляем код подтверждения и сохраняем хеш в БД
 	if _, err := telegram.RequestCode(account.ApiID, account.ApiHash, account.Phone, proxy, h.DB, created.ID); err != nil {
 		log.Printf("[ERROR] Не удалось получить код: %v", err)
-		c.JSON(500, gin.H{"error": "Failed to request code"})
+		httputil.RespondError(c, 500, "Failed to request code")
 		return
 	}
 
@@ -76,7 +77,7 @@ func (h *AccountHandler) VerifyAccount(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(400, gin.H{"error": "Invalid code"})
+		httputil.RespondError(c, 400, "Invalid code")
 		return
 	}
 
@@ -86,13 +87,13 @@ func (h *AccountHandler) VerifyAccount(c *gin.Context) {
 		if errors.Is(err, sql.ErrNoRows) {
 			// Логируем отсутствие данных, чтобы понимать, что таблица пуста
 			log.Printf("[WARN] В БД нет аккаунтов: %v", err)
-			c.JSON(404, gin.H{"error": "Account not found"})
+			httputil.RespondError(c, 404, "Account not found")
 			return
 		}
 
 		// Логируем неожиданную ошибку, чтобы понимать, что сломалось при выборке
 		log.Printf("[ERROR] Не удалось получить последний аккаунт: %v", err)
-		c.JSON(500, gin.H{"error": "DB error"})
+		httputil.RespondError(c, 500, "DB error")
 		return
 	}
 
@@ -115,13 +116,13 @@ func (h *AccountHandler) VerifyAccount(c *gin.Context) {
 		account.PhoneCodeHash,
 		account.Proxy,
 	); err != nil {
-		c.JSON(400, gin.H{"error": "Auth failed: " + err.Error()})
+		httputil.RespondError(c, 400, "Auth failed: "+err.Error())
 		return
 	}
 
 	// Помечаем аккаунт как авторизованный
 	if err := h.DB.MarkAccountAsAuthorized(account.ID); err != nil {
-		c.JSON(500, gin.H{"error": "Failed to mark account as authorized"})
+		httputil.RespondError(c, 500, "Failed to mark account as authorized")
 		return
 	}
 

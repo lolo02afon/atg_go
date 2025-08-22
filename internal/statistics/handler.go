@@ -1,6 +1,7 @@
 package statistics
 
 import (
+	"atg_go/internal/httputil"
 	"atg_go/pkg/storage"
 	stats "atg_go/pkg/telegram/statistics"
 	"log"
@@ -24,7 +25,7 @@ func (h *Handler) Collect(c *gin.Context) {
 	stat, err := stats.Calculate(h.DB)
 	if err != nil {
 		log.Printf("[HANDLER ERROR] не удалось посчитать статистику: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "не удалось посчитать статистику"})
+		httputil.RespondError(c, http.StatusInternalServerError, "не удалось посчитать статистику")
 		return
 	}
 	c.JSON(http.StatusOK, stat)
