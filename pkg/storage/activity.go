@@ -47,45 +47,6 @@ func (db *DB) SaveComment(accountID, channelID, messageID int) error {
 	return db.SaveActivity(accountID, channelID, messageID, ActivityTypeComment)
 }
 
-// CountCommentsForDate возвращает количество комментариев, оставленных аккаунтом в указанную дату.
-// date интерпретируется в своей временной зоне.
-func (db *DB) CountCommentsForDate(accountID int, date time.Time) (int, error) {
-	start := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
-	end := start.Add(24 * time.Hour)
-	var count int
-	err := db.Conn.QueryRow(
-		`SELECT COUNT(*) FROM activity WHERE id_account = $1 AND activity_type = $2 AND date_time >= $3 AND date_time < $4`,
-		accountID, ActivityTypeComment, start, end,
-	).Scan(&count)
-	return count, err
-}
-
-// CountReactionsForDate возвращает количество реакций, поставленных аккаунтом в указанную дату.
-// date интерпретируется в своей временной зоне.
-func (db *DB) CountReactionsForDate(accountID int, date time.Time) (int, error) {
-	start := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
-	end := start.Add(24 * time.Hour)
-	var count int
-	err := db.Conn.QueryRow(
-		`SELECT COUNT(*) FROM activity WHERE id_account = $1 AND activity_type = $2 AND date_time >= $3 AND date_time < $4`,
-		accountID, ActivityTypeReaction, start, end,
-	).Scan(&count)
-	return count, err
-}
-
-// HasComment проверяет, существует ли комментарий для поста с указанным ID у
-// заданной учетной записи. messageID должен содержать ID поста канала. Возвращает
-// true, если запись с activity_type = 'comment' уже есть в таблице.
-func (db *DB) HasComment(accountID, messageID int) (bool, error) {
-	var exists bool
-	msgID := strconv.FormatInt(int64(messageID), 10) // сравниваем по строковому ID
-	err := db.Conn.QueryRow(
-		`SELECT EXISTS(SELECT 1 FROM activity WHERE id_account = $1 AND id_message = $2 AND activity_type = 'comment')`,
-		accountID, msgID,
-	).Scan(&exists)
-	return exists, err
-}
-
 // HasCommentForPost проверяет, существует ли комментарий для поста с указанным
 // ID в заданном канале. messageID должен быть ID поста канала. Возвращает true
 // при наличии записи с типом 'comment'.
