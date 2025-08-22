@@ -2,17 +2,18 @@ package module
 
 import "atg_go/pkg/storage"
 
-// SaveActivity сохраняет любую активность (комментарий или реакцию) в таблице activity.
-func SaveActivity(db *storage.DB, accountID, channelID, messageID int, activityType string) error {
-	return db.SaveActivity(accountID, channelID, messageID, activityType)
-}
+// Функции ниже сохраняют поддерживаемые типы активности. Отказ от
+// универсального метода заставляет явно добавлять новый тип активности,
+// что уменьшает риск нелегитимных значений в таблице.
 
-// SaveReactionActivity сохраняет реакцию, используя стандартный тип activity_type "reaction".
+// SaveReactionActivity сохраняет реакцию, что позволяет не передавать
+// строковый тип действия из вызывающего кода и тем самым избегать опечаток.
 func SaveReactionActivity(db *storage.DB, accountID, channelID, messageID int) error {
 	return db.SaveReaction(accountID, channelID, messageID)
 }
 
-// SaveCommentActivity сохраняет комментарий с типом activity_type "comment".
+// SaveCommentActivity сохраняет комментарий по той же причине: тип действия
+// фиксирован и не зависит от внешнего ввода.
 // messageID — ID поста, к которому оставлен комментарий.
 func SaveCommentActivity(db *storage.DB, accountID, channelID, messageID int) error {
 	return db.SaveComment(accountID, channelID, messageID)
