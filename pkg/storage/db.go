@@ -243,6 +243,16 @@ func (db *DB) MarkAccountAsAuthorized(accountID int) error {
 	return err
 }
 
+// MarkAccountAsUnauthorized сбрасывает флаг авторизации,
+// чтобы в БД отражалось фактическое отсутствие рабочей сессии.
+func (db *DB) MarkAccountAsUnauthorized(accountID int) error {
+	_, err := db.Conn.Exec(
+		"UPDATE accounts SET is_authorized = false WHERE id = $1",
+		accountID,
+	)
+	return err
+}
+
 // Обновляет phone_code_hash для указанного аккаунта
 func (db *DB) UpdatePhoneCodeHash(accountID int, hash string) error {
 	_, err := db.Conn.Exec(

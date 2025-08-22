@@ -9,6 +9,7 @@ import (
 
 	"atg_go/pkg/storage"
 	"atg_go/pkg/telegram/module"
+	accountauthcheck "atg_go/pkg/telegram/module/account_auth_check"
 
 	"github.com/gotd/td/tg"
 )
@@ -31,6 +32,12 @@ func DisconnectSuspiciousSessions(db *storage.DB, minDelay, maxDelay int) (map[s
 	randSrc := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	for _, acc := range accounts {
+		// Перед проверкой сессий убеждаемся, что аккаунт ещё авторизован.
+		// Если авторизация пропала, пропускаем обработку, чтобы не тратить ресурсы впустую.
+		if !accountauthcheck.Check(db, acc) {
+			continue
+		}
+
 		// Выбираем задержку в заданном диапазоне, чтобы распределить нагрузку.
 		if maxDelay > minDelay {
 			delay := randSrc.Intn(maxDelay-minDelay+1) + minDelay
