@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 
+	"atg_go/internal/httputil"
 	"atg_go/pkg/storage"
 	telegrammodule "atg_go/pkg/telegram/module/active_sessions_disconnect"
 
@@ -25,7 +26,7 @@ func NewHandler(db *storage.DB) *Handler {
 // логов и при этом иметь представление о разных пользователях.
 func (h *Handler) Info(c *gin.Context) {
 	if err := telegrammodule.LogAuthorizations(h.DB); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httputil.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "logged"})
@@ -42,19 +43,19 @@ func (h *Handler) Disconnect(c *gin.Context) {
 
 	// Отказ, если тело не соответствует ожидаемому формату, чтобы не обрабатывать некорректные данные.
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректное тело запроса"})
+		httputil.RespondError(c, http.StatusBadRequest, "некорректное тело запроса")
 		return
 	}
 
 	// Проверяем, что указаны ровно два значения задержки.
 	if len(req.Delay) != 2 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "delay должен содержать два значения"})
+		httputil.RespondError(c, http.StatusBadRequest, "delay должен содержать два значения")
 		return
 	}
 
 	minDelay, maxDelay := req.Delay[0], req.Delay[1]
 	if minDelay < 0 || maxDelay < 0 || maxDelay < minDelay {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный диапазон задержки"})
+		httputil.RespondError(c, http.StatusBadRequest, "некорректный диапазон задержки")
 		return
 	}
 
@@ -62,7 +63,7 @@ func (h *Handler) Disconnect(c *gin.Context) {
 	if err != nil {
 		// Логируем ошибку, чтобы понять, где произошёл сбой
 		log.Printf("[ACTIVE SESSIONS DISCONNECT] ошибка выполнения: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httputil.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if len(res) == 0 {
