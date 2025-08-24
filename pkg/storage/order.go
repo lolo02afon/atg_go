@@ -87,9 +87,10 @@ func (db *DB) CreateOrder(o models.Order) (*models.Order, error) {
 	}
 	o.Gender = gender
 
-	// Выбираем свободные аккаунты в случайном порядке
+	// Выбираем свободные аккаунты, исключая мониторинговые,
+	// чтобы такие аккаунты не становились исполнителями заказов
 	rows, err := tx.Query(
-		`SELECT id FROM accounts WHERE order_id IS NULL ORDER BY RANDOM() LIMIT $1`,
+		`SELECT id FROM accounts WHERE order_id IS NULL AND account_monitoring = FALSE ORDER BY RANDOM() LIMIT $1`,
 		o.AccountsNumberTheory,
 	)
 	if err != nil {
@@ -144,9 +145,9 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 	o.AccountsNumberTheory = newNumber
 
 	if newNumber > o.AccountsNumberFact {
-		// Добавляем недостающие аккаунты
+		// Добавляем недостающие аккаунты, игнорируя аккаунты под мониторингом
 		diff := newNumber - o.AccountsNumberFact
-		rows, err := tx.Query(`SELECT id FROM accounts WHERE order_id IS NULL ORDER BY RANDOM() LIMIT $1`, diff)
+		rows, err := tx.Query(`SELECT id FROM accounts WHERE order_id IS NULL AND account_monitoring = FALSE ORDER BY RANDOM() LIMIT $1`, diff)
 		if err != nil {
 			return nil, err
 		}
@@ -327,7 +328,7 @@ func (db *DB) AssignFreeAccountsToOrders() error {
 				// Нужно добавить недостающие аккаунты
 				need := theory - actual
 				accRows, err := tx.Query(
-					`SELECT id FROM accounts WHERE order_id IS NULL AND is_authorized = TRUE AND gender && $1::gender_enum[] ORDER BY RANDOM() LIMIT $2`,
+					`SELECT id FROM accounts WHERE order_id IS NULL AND is_authorized = TRUE AND account_monitoring = FALSE AND gender && $1::gender_enum[] ORDER BY RANDOM() LIMIT $2`,
 					pq.Array(genders), need,
 				)
 				if err != nil {

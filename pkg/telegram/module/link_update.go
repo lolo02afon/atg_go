@@ -16,6 +16,12 @@ import (
 // Если order_id есть, в описание ставится текст из поля url_description соответствующего заказа,
 // иначе описание очищается. Комментарии на русском языке по требованию пользователя.
 func Modf_OrderLinkUpdate(db *storage.DB) error {
+	// Сначала освобождаем аккаунты под мониторингом, если они случайно привязаны к заказам
+	if err := db.ReleaseMonitoringAccounts(); err != nil {
+		log.Printf("[LINK_UPDATE ERROR] освобождение мониторинговых аккаунтов: %v", err)
+		return err
+	}
+
 	// Перед обновлением описаний синхронизируем количество аккаунтов в заказах
 	if err := db.AssignFreeAccountsToOrders(); err != nil {
 		log.Printf("[LINK_UPDATE ERROR] назначение аккаунтов: %v", err)
