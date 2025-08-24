@@ -8,7 +8,7 @@ type Account struct {
 	ApiID             int            `json:"api_id"`
 	ApiHash           string         `json:"api_hash"`
 	IsAuthorized      bool           `json:"is_authorized"`
-	AccountMonitoring bool           `json:"account_monitoring"` // Включает мониторинг аккаунта; по умолчанию false для экономии ресурсов
+	AccountMonitoring bool           `json:"account_monitoring"` // Включает мониторинг аккаунта; такие аккаунты не назначаются на заказы
 	Gender            pq.StringArray `json:"gender"`             // Пол(ы) аккаунта: допускается несколько значений
 	PhoneCodeHash     string         `json:"phone_code_hash"`
 	ProxyID           *int           `json:"proxy_id"`

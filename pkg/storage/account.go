@@ -315,14 +315,15 @@ func (db *DB) AssignProxyToAccount(accountID, proxyID int, limit int) error {
 // GetAuthorizedAccounts возвращает все авторизованные аккаунты, чтобы
 // сервисы могли быстро получить список рабочих сессий.
 func (db *DB) GetAuthorizedAccounts() ([]models.Account, error) {
-	// Запрос для выборки авторизованных аккаунтов; gender приводим к text[] для простого чтения
+	// Запрос для выборки авторизованных аккаунтов; gender приводим к text[] для простого чтения.
+	// Аккаунты под мониторингом исключаем, чтобы не использовать их в рабочих задачах
 	query := `
-       SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.gender::text[], a.proxy_id, a.order_id,
-              p.id, p.ip, p.port, p.login, p.password, p.ipv6, p.account_count, p.is_active
-       FROM accounts a
-       LEFT JOIN proxy p ON a.proxy_id = p.id
-       WHERE a.is_authorized = true
-   `
+      SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.gender::text[], a.proxy_id, a.order_id,
+             p.id, p.ip, p.port, p.login, p.password, p.ipv6, p.account_count, p.is_active
+      FROM accounts a
+      LEFT JOIN proxy p ON a.proxy_id = p.id
+      WHERE a.is_authorized = true AND a.account_monitoring = false
+  `
 
 	// Выполняем запрос
 	rows, err := db.Conn.Query(query)
@@ -404,4 +405,14 @@ func (db *DB) GetAuthorizedAccounts() ([]models.Account, error) {
 
 	log.Printf("[DB INFO] Found %d authorized accounts", len(accounts))
 	return accounts, nil
+}
+
+// ReleaseMonitoringAccounts снимает привязку заказов с аккаунтов под мониторингом.
+// Это нужно, чтобы такие аккаунты не выполняли заказы даже если были назначены ранее.
+func (db *DB) ReleaseMonitoringAccounts() error {
+	if _, err := db.Conn.Exec(`UPDATE accounts SET order_id = NULL WHERE account_monitoring = TRUE AND order_id IS NOT NULL`); err != nil {
+		log.Printf("[DB ERROR] освобождение мониторинговых аккаунтов: %v", err)
+		return err
+	}
+	return nil
 }
