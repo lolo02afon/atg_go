@@ -52,6 +52,9 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 	// Отбрасываем свободные аккаунты, оставляя только привязанные к заказу.
 	accounts = common.FilterAccountsWithOrder(accounts)
 
+	// Исключаем аккаунты с включённым мониторингом, чтобы они не тратили лимиты на реакции.
+	accounts = common.FilterAccountsWithoutMonitoring(accounts)
+
 	// Унифицированная обработка отсутствия подходящих аккаунтов.
 	if len(accounts) == 0 {
 		log.Printf("[HANDLER WARN] %s", common.NoOrderedAccountsMessage)
