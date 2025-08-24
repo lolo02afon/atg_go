@@ -50,6 +50,9 @@ func (h *CommentHandler) SendComment(c *gin.Context) {
 	// Фильтруем аккаунты, оставляя только закреплённые за заказом.
 	accounts = common.FilterAccountsWithOrder(accounts)
 
+	// Исключаем аккаунты, используемые для мониторинга, чтобы не мешать их основной задаче.
+	accounts = common.FilterAccountsWithoutMonitoring(accounts)
+
 	// Если ни один аккаунт не найден, возвращаем единообразную ошибку.
 	if len(accounts) == 0 {
 		log.Printf("[HANDLER WARN] %s", common.NoOrderedAccountsMessage)
