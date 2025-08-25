@@ -21,10 +21,11 @@ type Order struct {
 	Name                 string         `json:"name"`
 	Category             pq.StringArray `json:"category"`        // Перечень категорий из channels; может быть пустым
 	URLDescription       string         `json:"url_description"` // Текст ссылки для описания
-        URLDefault           string         `json:"url_default"`     // Ссылка по умолчанию (уникальная)
+	URLDefault           string         `json:"url_default"`     // Ссылка по умолчанию (уникальная)
 	ChannelTGID          *string        `json:"channel_tgid"`    // ID канала, извлечённый из URLDefault
 	AccountsNumberTheory int            `json:"accounts_number_theory"`
 	AccountsNumberFact   int            `json:"accounts_number_fact"`
-	Gender               pq.StringArray `json:"gender"` // Пол(ы) аккаунтов для заказа
+	SubsActiveCount      *int           `json:"subs_active_count"` // Сколько аккаунтов должны активничать на канале; NULL, если не задано
+	Gender               pq.StringArray `json:"gender"`            // Пол(ы) аккаунтов для заказа
 	DateTime             time.Time      `json:"date_time"`
 }
