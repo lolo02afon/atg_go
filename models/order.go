@@ -9,7 +9,7 @@ import (
 // Order описывает заказ на размещение ссылки в описании аккаунтов
 // name - произвольное название заказа
 // url_description - ссылка, которая будет вставлена в описание аккаунта
-// url_default - ссылка по умолчанию, которая хранится в заказе
+// url_default - уникальная ссылка по умолчанию, которая хранится в заказе
 // accounts_number_theory - желаемое количество аккаунтов
 // accounts_number_fact - количество фактически задействованных аккаунтов
 // date_time - время создания заказа
@@ -21,7 +21,7 @@ type Order struct {
 	Name                 string         `json:"name"`
 	Category             pq.StringArray `json:"category"`        // Перечень категорий из channels; может быть пустым
 	URLDescription       string         `json:"url_description"` // Текст ссылки для описания
-	URLDefault           string         `json:"url_default"`     // Ссылка по умолчанию
+        URLDefault           string         `json:"url_default"`     // Ссылка по умолчанию (уникальная)
 	ChannelTGID          *string        `json:"channel_tgid"`    // ID канала, извлечённый из URLDefault
 	AccountsNumberTheory int            `json:"accounts_number_theory"`
 	AccountsNumberFact   int            `json:"accounts_number_fact"`
