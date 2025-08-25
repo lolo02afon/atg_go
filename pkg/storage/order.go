@@ -10,9 +10,9 @@ import (
 	"github.com/lib/pq"
 )
 
-// extractChannelTGID извлекает ID канала из ссылки вида https://t.me/c/<id>/...
+// ExtractChannelTGID извлекает ID канала из ссылки вида https://t.me/c/<id>/...
 // Возвращает nil, если ссылка не соответствует ожидаемому формату
-func extractChannelTGID(url string) *string {
+func ExtractChannelTGID(url string) *string {
 	const prefix = "https://t.me/c/"
 	if strings.HasPrefix(url, prefix) {
 		rest := strings.TrimPrefix(url, prefix)
@@ -46,6 +46,36 @@ func (db *DB) GetOrdersDefaultURLs() ([]string, error) {
 		return nil, err
 	}
 	return urls, nil
+}
+
+// GetOrdersWithoutChannelTGID возвращает заказы без заполненного channel_tgid
+// Используется перед обновлением описаний, чтобы знать, какие заказы требуют дополнения
+func (db *DB) GetOrdersWithoutChannelTGID() ([]models.Order, error) {
+	rows, err := db.Conn.Query(`SELECT id, url_default FROM orders WHERE channel_tgid IS NULL AND url_default <> ''`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var orders []models.Order
+	for rows.Next() {
+		var o models.Order
+		if err := rows.Scan(&o.ID, &o.URLDefault); err != nil {
+			return nil, err
+		}
+		orders = append(orders, o)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return orders, nil
+}
+
+// SetOrderChannelTGID устанавливает значение channel_tgid для заказа
+// Вызывается после получения ID канала по ссылке
+func (db *DB) SetOrderChannelTGID(orderID int, channelTGID string) error {
+	_, err := db.Conn.Exec(`UPDATE orders SET channel_tgid = $1 WHERE id = $2`, channelTGID, orderID)
+	return err
 }
 
 // CreateOrder создаёт заказ и распределяет свободные аккаунты
@@ -93,7 +123,7 @@ func (db *DB) CreateOrder(o models.Order) (*models.Order, error) {
 	gender := models.FilterGenders(o.Gender)
 
 	// Извлекаем ID канала из ссылки по умолчанию, если это возможно
-	channelTGID := extractChannelTGID(o.URLDefault)
+	channelTGID := ExtractChannelTGID(o.URLDefault)
 
 	// Вставляем запись о заказе вместе со ссылкой по умолчанию и ID канала
 	err = tx.QueryRow(
