@@ -13,4 +13,6 @@ type ChannelPost struct {
 	OrderID      int       `json:"order_id"`
 	PostDateTime time.Time `json:"post_date_time"`
 	PostURL      string    `json:"post_url"`
+	// SubsActiveAll фиксирует активных подписчиков для оценки охвата; NULL если данных нет
+	SubsActiveAll *int `json:"subs_active_all"`
 }
