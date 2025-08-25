@@ -312,34 +312,27 @@ func (db *DB) AssignProxyToAccount(accountID, proxyID int, limit int) error {
 	return err
 }
 
-// GetAuthorizedAccounts возвращает все авторизованные аккаунты, чтобы
-// сервисы могли быстро получить список рабочих сессий.
-func (db *DB) GetAuthorizedAccounts() ([]models.Account, error) {
-	// Запрос для выборки авторизованных аккаунтов; gender приводим к text[] для простого чтения.
-	// Аккаунты под мониторингом исключаем, чтобы не использовать их в рабочих задачах
+// getAccounts возвращает список аккаунтов по произвольному условию WHERE.
+// Это позволяет переиспользовать код выборки для разных типов аккаунтов
+// и не дублировать логику обработки NULL-полей.
+func (db *DB) getAccounts(where string, args ...any) ([]models.Account, error) {
 	query := `
       SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.gender::text[], a.proxy_id, a.order_id,
              p.id, p.ip, p.port, p.login, p.password, p.ipv6, p.account_count, p.is_active
       FROM accounts a
       LEFT JOIN proxy p ON a.proxy_id = p.id
-      WHERE a.is_authorized = true AND a.account_monitoring = false
-  `
+      WHERE ` + where
 
-	// Выполняем запрос
-	rows, err := db.Conn.Query(query)
+	rows, err := db.Conn.Query(query, args...)
 	if err != nil {
-		log.Printf("[DB ERROR] Failed to get authorized accounts: %v", err)
+		log.Printf("[DB ERROR] Failed to get accounts: %v", err)
 		return nil, fmt.Errorf("database error")
 	}
 	defer rows.Close()
 
 	var accounts []models.Account
-
-	// Итерируем по результатам
 	for rows.Next() {
 		var account models.Account
-
-		// Переменные для возможных NULL-значений прокси
 		var (
 			proxyID        sql.NullInt64
 			proxyIP        sql.NullString
@@ -360,7 +353,7 @@ func (db *DB) GetAuthorizedAccounts() ([]models.Account, error) {
 			&account.ApiHash,
 			&account.PhoneCodeHash,
 			&account.IsAuthorized,
-			&account.Gender, // driver преобразует text[] в []string
+			&account.Gender,
 			&accountProxyID,
 			&accountOrderID,
 			&proxyID,
@@ -373,10 +366,9 @@ func (db *DB) GetAuthorizedAccounts() ([]models.Account, error) {
 			&proxyIsActive,
 		); err != nil {
 			log.Printf("[DB WARN] Failed to scan account: %v", err)
-			continue // Пропускаем проблемные записи
+			continue
 		}
 
-		// Заполняем ID прокси и заказа в аккаунте, если они есть
 		if accountProxyID.Valid {
 			id := int(accountProxyID.Int64)
 			account.ProxyID = &id
@@ -386,7 +378,6 @@ func (db *DB) GetAuthorizedAccounts() ([]models.Account, error) {
 			account.OrderID = &id
 		}
 
-		// Если данные по прокси получены, формируем объект прокси
 		if proxyID.Valid {
 			account.Proxy = &models.Proxy{
 				ID:            int(proxyID.Int64),
@@ -402,9 +393,23 @@ func (db *DB) GetAuthorizedAccounts() ([]models.Account, error) {
 
 		accounts = append(accounts, account)
 	}
-
-	log.Printf("[DB INFO] Found %d authorized accounts", len(accounts))
 	return accounts, nil
+}
+
+// GetAuthorizedAccounts возвращает все авторизованные аккаунты без мониторинга,
+// чтобы сервисы могли быстро получить список рабочих сессий.
+func (db *DB) GetAuthorizedAccounts() ([]models.Account, error) {
+	accounts, err := db.getAccounts("a.is_authorized = true AND a.account_monitoring = false")
+	if err == nil {
+		log.Printf("[DB INFO] Found %d authorized accounts", len(accounts))
+	}
+	return accounts, err
+}
+
+// GetMonitoringAccounts возвращает авторизованные аккаунты,
+// помеченные как мониторинговые.
+func (db *DB) GetMonitoringAccounts() ([]models.Account, error) {
+	return db.getAccounts("a.is_authorized = true AND a.account_monitoring = true")
 }
 
 // ReleaseMonitoringAccounts снимает привязку заказов с аккаунтов под мониторингом.

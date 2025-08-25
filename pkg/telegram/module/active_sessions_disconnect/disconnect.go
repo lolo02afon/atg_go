@@ -44,7 +44,7 @@ func DisconnectSuspiciousSessions(db *storage.DB, minDelay, maxDelay int) (map[s
 			time.Sleep(time.Duration(delay) * time.Second)
 		}
 
-		client, err := module.Modf_AccountInitialization(acc.ApiID, acc.ApiHash, acc.Phone, acc.Proxy, nil, db.Conn, acc.ID)
+		client, err := module.Modf_AccountInitialization(acc.ApiID, acc.ApiHash, acc.Phone, acc.Proxy, nil, db.Conn, acc.ID, nil)
 		if err != nil {
 			// Не прерываем работу из-за одного аккаунта, чтобы обработать остальные
 			log.Printf("[ACTIVE SESSIONS DISCONNECT] аккаунт %s: ошибка инициализации: %v", acc.Phone, err)

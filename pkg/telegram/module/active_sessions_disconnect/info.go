@@ -37,7 +37,7 @@ func LogAuthorizations(db *storage.DB) error {
 
 	// Для каждого выбранного аккаунта инициализируем клиента и выводим его активные сессии
 	for _, acc := range accounts[:limit] {
-		client, err := module.Modf_AccountInitialization(acc.ApiID, acc.ApiHash, acc.Phone, acc.Proxy, nil, db.Conn, acc.ID)
+		client, err := module.Modf_AccountInitialization(acc.ApiID, acc.ApiHash, acc.Phone, acc.Proxy, nil, db.Conn, acc.ID, nil)
 		if err != nil {
 			// Не прерываем обработку остальных аккаунтов, чтобы увидеть информацию хотя бы по части из них
 			log.Printf("[ACTIVE SESSIONS] аккаунт %d (%s): ошибка инициализации: %v", acc.ID, acc.Phone, err)

@@ -49,7 +49,7 @@ func ModF_UnsubscribeAll(db *storage.DB, delay [2]int, limit int) error {
 
 // unsubscribeAccount выходит из указанного количества каналов и групп для одного аккаунта.
 func unsubscribeAccount(db *storage.DB, acc *models.Account, delay [2]int, limit int, skip map[string]struct{}) error {
-	client, err := Modf_AccountInitialization(acc.ApiID, acc.ApiHash, acc.Phone, acc.Proxy, nil, db.Conn, acc.ID)
+	client, err := Modf_AccountInitialization(acc.ApiID, acc.ApiHash, acc.Phone, acc.Proxy, nil, db.Conn, acc.ID, nil)
 	if err != nil {
 		return err
 	}
