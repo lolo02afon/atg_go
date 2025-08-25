@@ -148,13 +148,28 @@ func (db *DB) CreateOrder(o models.Order) (*models.Order, error) {
 	// Извлекаем ID канала из ссылки по умолчанию, если это возможно
 	channelTGID := ExtractChannelTGID(o.URLDefault)
 
-	// Вставляем запись о заказе вместе со ссылкой по умолчанию и ID канала
-	err = tx.QueryRow(
-		`INSERT INTO orders (name, category, url_description, url_default, accounts_number_theory, gender, channel_tgid) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, accounts_number_fact, date_time`,
-		o.Name, pq.Array(o.Category), o.URLDescription, o.URLDefault, o.AccountsNumberTheory, pq.Array(gender), channelTGID,
-	).Scan(&o.ID, &o.AccountsNumberFact, &o.DateTime)
-	if err != nil {
+	// Вставляем запись о заказе вместе со ссылкой по умолчанию и ID канала.
+	// Если subs_active_count не указан, используем значение по умолчанию из БД.
+	var (
+		query           string
+		args            []any
+		subsActiveCount sql.NullInt64
+	)
+	if o.SubsActiveCount != nil {
+		query = `INSERT INTO orders (name, category, url_description, url_default, accounts_number_theory, gender, channel_tgid, subs_active_count) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, accounts_number_fact, date_time, subs_active_count`
+		args = []any{o.Name, pq.Array(o.Category), o.URLDescription, o.URLDefault, o.AccountsNumberTheory, pq.Array(gender), channelTGID, *o.SubsActiveCount}
+	} else {
+		query = `INSERT INTO orders (name, category, url_description, url_default, accounts_number_theory, gender, channel_tgid) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, accounts_number_fact, date_time, subs_active_count`
+		args = []any{o.Name, pq.Array(o.Category), o.URLDescription, o.URLDefault, o.AccountsNumberTheory, pq.Array(gender), channelTGID}
+	}
+	if err = tx.QueryRow(query, args...).Scan(&o.ID, &o.AccountsNumberFact, &o.DateTime, &subsActiveCount); err != nil {
 		return nil, err
+	}
+	if subsActiveCount.Valid {
+		val := int(subsActiveCount.Int64)
+		o.SubsActiveCount = &val
+	} else {
+		o.SubsActiveCount = nil
 	}
 	o.Gender = gender
 	o.ChannelTGID = channelTGID
@@ -199,11 +214,18 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 	defer tx.Rollback()
 
 	var o models.Order
+	var subsActiveCount sql.NullInt64
 	err = tx.QueryRow(
 		// Приводим gender к text[], иначе pq не сможет сканировать массив enum
-		`SELECT id, name, category, url_description, url_default, channel_tgid, accounts_number_theory, accounts_number_fact, gender::text[], date_time FROM orders WHERE id = $1`,
+		`SELECT id, name, category, url_description, url_default, channel_tgid, accounts_number_theory, accounts_number_fact, subs_active_count, gender::text[], date_time FROM orders WHERE id = $1`,
 		orderID,
-	).Scan(&o.ID, &o.Name, pq.Array(&o.Category), &o.URLDescription, &o.URLDefault, &o.ChannelTGID, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.Gender, &o.DateTime) // читаем текст, категории и ссылку по умолчанию
+	).Scan(&o.ID, &o.Name, pq.Array(&o.Category), &o.URLDescription, &o.URLDefault, &o.ChannelTGID, &o.AccountsNumberTheory, &o.AccountsNumberFact, &subsActiveCount, &o.Gender, &o.DateTime) // читаем текст, категории и ссылку по умолчанию
+	if subsActiveCount.Valid {
+		val := int(subsActiveCount.Int64)
+		o.SubsActiveCount = &val
+	} else {
+		o.SubsActiveCount = nil
+	}
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, err
@@ -286,11 +308,18 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 // Используется для получения ссылки при обновлении описаний аккаунтов
 func (db *DB) GetOrderByID(id int) (*models.Order, error) {
 	var o models.Order
+	var subsActiveCount sql.NullInt64
 	err := db.Conn.QueryRow(
 		// gender приводим к text[], чтобы избежать ошибок сканирования enum-массива
-		`SELECT id, name, category, url_description, url_default, channel_tgid, accounts_number_theory, accounts_number_fact, gender::text[], date_time FROM orders WHERE id = $1`,
+		`SELECT id, name, category, url_description, url_default, channel_tgid, accounts_number_theory, accounts_number_fact, subs_active_count, gender::text[], date_time FROM orders WHERE id = $1`,
 		id,
-	).Scan(&o.ID, &o.Name, pq.Array(&o.Category), &o.URLDescription, &o.URLDefault, &o.ChannelTGID, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.Gender, &o.DateTime) // читаем текст, категории и ссылку по умолчанию
+	).Scan(&o.ID, &o.Name, pq.Array(&o.Category), &o.URLDescription, &o.URLDefault, &o.ChannelTGID, &o.AccountsNumberTheory, &o.AccountsNumberFact, &subsActiveCount, &o.Gender, &o.DateTime) // читаем текст, категории и ссылку по умолчанию
+	if subsActiveCount.Valid {
+		val := int(subsActiveCount.Int64)
+		o.SubsActiveCount = &val
+	} else {
+		o.SubsActiveCount = nil
+	}
 	if err != nil {
 		return nil, err
 	}
