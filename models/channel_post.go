@@ -13,6 +13,10 @@ type ChannelPost struct {
 	OrderID      int       `json:"order_id"`
 	PostDateTime time.Time `json:"post_date_time"`
 	PostURL      string    `json:"post_url"`
-	// SubsActiveAll фиксирует активных подписчиков для оценки охвата; NULL если данных нет
-	SubsActiveAll *int `json:"subs_active_all"`
+	// SubsActiveView отражает требуемое число просмотров поста; nil если заказ не ставит цель
+	SubsActiveView *int `json:"subs_active_view"`
+	// SubsActiveReaction хранит целевое количество реакций; nil когда заказ не задаёт метрику
+	SubsActiveReaction *int `json:"subs_active_reaction"`
+	// SubsActiveRepost фиксирует требуемые репосты; nil при отсутствии требования
+	SubsActiveRepost *int `json:"subs_active_repost"`
 }
