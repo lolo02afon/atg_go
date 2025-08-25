@@ -2,6 +2,7 @@ package module
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -35,6 +36,12 @@ func Modf_OrderLinkUpdate(db *storage.DB) error {
 		return err
 	}
 
+	// Перед обновлением описаний заполняем отсутствующие ID каналов в заказах
+	if err := populateOrderChannelTGID(db, accounts); err != nil {
+		log.Printf("[LINK_UPDATE ERROR] заполнение channel_tgid: %v", err)
+		return err
+	}
+
 	for _, acc := range accounts {
 		var description string
 		if acc.OrderID != nil {
@@ -51,6 +58,57 @@ func Modf_OrderLinkUpdate(db *storage.DB) error {
 		}
 	}
 	return nil
+}
+
+// populateOrderChannelTGID заполняет поле channel_tgid у заказов с помощью Telegram API
+// Используется первый доступный авторизованный аккаунт, так как требуется только получение ID канала
+func populateOrderChannelTGID(db *storage.DB, accounts []models.Account) error {
+	orders, err := db.GetOrdersWithoutChannelTGID()
+	if err != nil {
+		return err
+	}
+	if len(orders) == 0 {
+		return nil
+	}
+	if len(accounts) == 0 {
+		return fmt.Errorf("нет авторизованных аккаунтов")
+	}
+	acc := accounts[0]
+
+	// Инициализируем клиента Telegram для первого аккаунта
+	client, err := Modf_AccountInitialization(acc.ApiID, acc.ApiHash, acc.Phone, acc.Proxy, nil, db.Conn, acc.ID)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	return client.Run(ctx, func(ctx context.Context) error {
+		api := tg.NewClient(client)
+		for _, o := range orders {
+			username, err := Modf_ExtractUsername(o.URLDefault)
+			if err != nil {
+				log.Printf("[LINK_UPDATE WARN] неверный URL %s: %v", o.URLDefault, err)
+				continue
+			}
+			resolved, err := api.ContactsResolveUsername(ctx, &tg.ContactsResolveUsernameRequest{Username: username})
+			if err != nil {
+				log.Printf("[LINK_UPDATE WARN] resolve %s: %v", username, err)
+				continue
+			}
+			ch, err := Modf_FindChannel(resolved.GetChats())
+			if err != nil {
+				log.Printf("[LINK_UPDATE WARN] поиск канала %s: %v", username, err)
+				continue
+			}
+			if err := db.SetOrderChannelTGID(o.ID, ch.ID); err != nil {
+				log.Printf("[LINK_UPDATE WARN] обновление channel_tgid заказа %d: %v", o.ID, err)
+				continue
+			}
+		}
+		return nil
+	})
 }
 
 // updateAccountDescription устанавливает новое описание (about) для аккаунта

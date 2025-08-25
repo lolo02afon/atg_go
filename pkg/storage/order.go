@@ -33,6 +33,35 @@ func (db *DB) GetOrdersDefaultURLs() ([]string, error) {
 	return urls, nil
 }
 
+// GetOrdersWithoutChannelTGID возвращает заказы, у которых не заполнен channel_tgid
+// Это нужно, чтобы при обновлении ссылок можно было добавить недостающие ID каналов
+func (db *DB) GetOrdersWithoutChannelTGID() ([]models.Order, error) {
+	rows, err := db.Conn.Query(`SELECT id, url_default FROM orders WHERE channel_tgid IS NULL`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var orders []models.Order
+	for rows.Next() {
+		var o models.Order
+		if err := rows.Scan(&o.ID, &o.URLDefault); err != nil {
+			return nil, err
+		}
+		orders = append(orders, o)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return orders, nil
+}
+
+// SetOrderChannelTGID устанавливает ID канала для указанного заказа
+func (db *DB) SetOrderChannelTGID(orderID int, tgid int64) error {
+	_, err := db.Conn.Exec(`UPDATE orders SET channel_tgid = $1 WHERE id = $2`, tgid, orderID)
+	return err
+}
+
 // CreateOrder создаёт заказ и распределяет свободные аккаунты
 func (db *DB) CreateOrder(o models.Order) (*models.Order, error) {
 	tx, err := db.Conn.Begin()
