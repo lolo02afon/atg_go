@@ -49,7 +49,7 @@ func (a AuthHelper) AcceptTermsOfService(ctx context.Context, tos tg.HelpTermsOf
 
 // RequestCode отправляет код подтверждения и сохраняет хеш в БД
 func RequestCode(apiID int, apiHash, phone string, proxy *models.Proxy, db *storage.DB, accountID int) (string, error) {
-	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, nil, db.Conn, accountID)
+	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, nil, db.Conn, accountID, nil)
 	if err != nil {
 		return "", err
 	}
@@ -77,7 +77,7 @@ func RequestCode(apiID int, apiHash, phone string, proxy *models.Proxy, db *stor
 
 func CompleteAuthorization(db *storage.DB, accountID, apiID int, apiHash, phone, code, phoneCodeHash string, proxy *models.Proxy) error {
 	randSrc := rand.New(rand.NewSource(time.Now().UnixNano()))
-	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, randSrc, db.Conn, accountID)
+	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, randSrc, db.Conn, accountID, nil)
 	if err != nil {
 		return err
 	}

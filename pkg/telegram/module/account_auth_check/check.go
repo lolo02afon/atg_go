@@ -17,7 +17,7 @@ import (
 // При отсутствии сессии или ошибке Telegram фиксируем событие в Sos
 // и сбрасываем флаг авторизации.
 func Check(db *storage.DB, acc models.Account) bool {
-	client, err := module.Modf_AccountInitialization(acc.ApiID, acc.ApiHash, acc.Phone, acc.Proxy, nil, db.Conn, acc.ID)
+	client, err := module.Modf_AccountInitialization(acc.ApiID, acc.ApiHash, acc.Phone, acc.Proxy, nil, db.Conn, acc.ID, nil)
 	if err != nil {
 		// Инициализация клиента без сессии невозможна, считаем аккаунт неавторизованным.
 		log.Printf("[ACCOUNT AUTH CHECK] аккаунт %s: ошибка инициализации: %v", acc.Phone, err)

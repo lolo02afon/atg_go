@@ -48,6 +48,29 @@ func (db *DB) GetOrdersDefaultURLs() ([]string, error) {
 	return urls, nil
 }
 
+// GetOrdersForMonitoring возвращает заказы с их ссылками и ID каналов.
+// Эти данные нужны мониторинговым аккаунтам для подписки на каналы.
+func (db *DB) GetOrdersForMonitoring() ([]models.Order, error) {
+	rows, err := db.Conn.Query(`SELECT id, url_default, channel_tgid FROM orders WHERE url_default <> ''`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var orders []models.Order
+	for rows.Next() {
+		var o models.Order
+		if err := rows.Scan(&o.ID, &o.URLDefault, &o.ChannelTGID); err != nil {
+			return nil, err
+		}
+		orders = append(orders, o)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return orders, nil
+}
+
 // GetOrdersWithoutChannelTGID возвращает заказы без заполненного channel_tgid
 // Используется перед обновлением описаний, чтобы знать, какие заказы требуют дополнения
 func (db *DB) GetOrdersWithoutChannelTGID() ([]models.Order, error) {

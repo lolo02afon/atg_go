@@ -69,7 +69,7 @@ func updateAccountDescription(db *storage.DB, acc models.Account, description st
 	defer accountmutex.UnlockAccount(acc.ID)
 
 	// Инициализируем клиента Telegram
-	client, err := Modf_AccountInitialization(acc.ApiID, acc.ApiHash, acc.Phone, acc.Proxy, nil, db.Conn, acc.ID)
+	client, err := Modf_AccountInitialization(acc.ApiID, acc.ApiHash, acc.Phone, acc.Proxy, nil, db.Conn, acc.ID, nil)
 	if err != nil {
 		return err
 	}

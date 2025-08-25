@@ -52,7 +52,7 @@ func Modf_UpdateOrdersChannelTGID(db *storage.DB) error {
 	}
 	defer accountmutex.UnlockAccount(acc.ID)
 
-	client, err := Modf_AccountInitialization(acc.ApiID, acc.ApiHash, acc.Phone, acc.Proxy, nil, db.Conn, acc.ID)
+	client, err := Modf_AccountInitialization(acc.ApiID, acc.ApiHash, acc.Phone, acc.Proxy, nil, db.Conn, acc.ID, nil)
 	if err != nil {
 		return err
 	}

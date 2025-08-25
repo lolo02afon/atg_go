@@ -16,7 +16,7 @@ import (
 
 // GetUserID возвращает ID пользователя Telegram для указанного аккаунта
 func GetUserID(db *storage.DB, accountID int, phone string, apiID int, apiHash string, proxy *models.Proxy) (int, error) {
-	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, nil, db.Conn, accountID)
+	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, nil, db.Conn, accountID, nil)
 	if err != nil {
 		return 0, err
 	}

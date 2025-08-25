@@ -39,7 +39,7 @@ func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID
 		return 0, 0, fmt.Errorf("не удалось извлечь имя пользователя: %w", err)
 	}
 
-	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, nil, db.Conn, accountID)
+	client, err := module.Modf_AccountInitialization(apiID, apiHash, phone, proxy, nil, db.Conn, accountID, nil)
 	if err != nil {
 		// При ошибке инициализации возвращаем нулевые идентификаторы
 		return 0, 0, err

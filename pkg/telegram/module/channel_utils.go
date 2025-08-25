@@ -117,13 +117,16 @@ func Modf_FindChannel(chats []tg.ChatClass) (*tg.Channel, error) {
 }
 
 // Создаем клиент Telegram с указанными параметрами и хранилищем сессии в БД.
-func Modf_AccountInitialization(apiID int, apiHash, phone string, p *models.Proxy, r *rand.Rand, db *sql.DB, accountID int) (*telegram.Client, error) {
+func Modf_AccountInitialization(apiID int, apiHash, phone string, p *models.Proxy, r *rand.Rand, db *sql.DB, accountID int, h telegram.UpdateHandler) (*telegram.Client, error) {
 	var storage session.Storage = &session.StorageMemory{}
 	if db != nil && accountID > 0 {
 		storage = &DBSessionStorage{DB: db, AccountID: accountID}
 	}
 
 	opts := telegram.Options{SessionStorage: storage}
+	if h != nil {
+		opts.UpdateHandler = h
+	}
 	if r != nil {
 		opts.Random = r
 	}

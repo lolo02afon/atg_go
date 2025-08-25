@@ -5,6 +5,7 @@ import (
 	"atg_go/internal/comments"
 	"atg_go/internal/middleware"
 	module "atg_go/internal/module"
+	monitoring "atg_go/internal/module/monitoring"
 	orders "atg_go/internal/order"
 	reaction "atg_go/internal/reaction"
 	statistics "atg_go/internal/statistics"
@@ -38,6 +39,9 @@ func main() {
 	// Инициализация хранилищ
 	db := storage.NewDB(dbConn)               // Для работы с аккаунтами
 	commentDB := storage.NewCommentDB(dbConn) // Для работы с каналами
+
+	// Запускаем фоновый мониторинг каналов заказов
+	monitoring.Run(db)
 
 	// Настройка роутера
 	r := setupRouter(db, commentDB)
