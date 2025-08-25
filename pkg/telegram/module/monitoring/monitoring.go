@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/rand"
 	"strconv"
 	"strings"
 	"time"
@@ -17,8 +18,27 @@ import (
 )
 
 type orderInfo struct {
-	id  int
-	url string
+	id              int
+	url             string
+	subsActiveCount *int
+}
+
+// randomByPercent возвращает число, равное случайному проценту от base.
+// Диапазон процентов задаётся в min и max, округление вверх или вниз выбирается случайно.
+func randomByPercent(base int, min, max float64) int {
+	if base == 0 {
+		return 0
+	}
+	percent := min + rand.Float64()*(max-min)
+	value := float64(base) * percent / 100
+	floor := int(value)
+	if value == float64(floor) {
+		return floor
+	}
+	if rand.Intn(2) == 0 {
+		return floor
+	}
+	return floor + 1
 }
 
 // Start запускает отслеживание новых постов на каналах заказов.
@@ -33,6 +53,7 @@ func Start(db *storage.DB) {
 
 // run выполняет инициализацию клиента Telegram и обрабатывает обновления.
 func run(db *storage.DB) error {
+	rand.Seed(time.Now().UnixNano())
 	accounts, err := db.GetMonitoringAccounts()
 	if err != nil {
 		return err
@@ -67,7 +88,31 @@ func run(db *storage.DB) error {
 		if o, ok := orderMap[peer.ChannelID]; ok {
 			postTime := time.Unix(int64(msg.Date), 0)
 			link := strings.TrimSuffix(o.url, "/") + "/" + strconv.Itoa(msg.ID)
-			cp := models.ChannelPost{OrderID: o.id, PostDateTime: postTime, PostURL: link}
+
+			// Определяем требуемые значения активной аудитории
+			view := 0
+			if o.subsActiveCount != nil {
+				view = *o.subsActiveCount
+			} else {
+				accounts, err := db.GetAuthorizedAccounts()
+				if err != nil {
+					log.Printf("[MONITORING] подсчёт аккаунтов: %v", err)
+				} else {
+					view = len(accounts)
+				}
+			}
+
+			reaction := randomByPercent(view, 1, 5)
+			repost := randomByPercent(view, 0.5, 1.5)
+
+			cp := models.ChannelPost{
+				OrderID:            o.id,
+				PostDateTime:       postTime,
+				PostURL:            link,
+				SubsActiveView:     &view,
+				SubsActiveReaction: &reaction,
+				SubsActiveRepost:   &repost,
+			}
 			if err := db.CreateChannelPost(cp); err != nil {
 				log.Printf("[MONITORING] сохранение поста: %v", err)
 			}
@@ -117,7 +162,7 @@ func run(db *storage.DB) error {
 			if o.ChannelTGID == nil {
 				_ = db.SetOrderChannelTGID(o.ID, fmt.Sprintf("%d", ch.ID))
 			}
-			orderMap[ch.ID] = orderInfo{id: o.ID, url: o.URLDefault}
+			orderMap[ch.ID] = orderInfo{id: o.ID, url: o.URLDefault, subsActiveCount: o.SubsActiveCount}
 		}
 
 		// держим соединение активным, пока контекст не будет отменён
