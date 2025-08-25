@@ -5,9 +5,24 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/lib/pq"
 )
+
+// extractChannelTGID извлекает ID канала из ссылки вида https://t.me/c/<id>/...
+// Возвращает nil, если ссылка не соответствует ожидаемому формату
+func extractChannelTGID(url string) *string {
+	const prefix = "https://t.me/c/"
+	if strings.HasPrefix(url, prefix) {
+		rest := strings.TrimPrefix(url, prefix)
+		idPart := strings.SplitN(rest, "/", 2)[0]
+		if idPart != "" {
+			return &idPart
+		}
+	}
+	return nil
+}
 
 // GetOrdersDefaultURLs возвращает список ссылок, от которых нельзя отписываться
 func (db *DB) GetOrdersDefaultURLs() ([]string, error) {
@@ -77,15 +92,19 @@ func (db *DB) CreateOrder(o models.Order) (*models.Order, error) {
 	// Фильтруем поле gender через общую функцию, чтобы хранить только допустимые значения
 	gender := models.FilterGenders(o.Gender)
 
-	// Вставляем запись о заказе вместе со ссылкой по умолчанию
+	// Извлекаем ID канала из ссылки по умолчанию, если это возможно
+	channelTGID := extractChannelTGID(o.URLDefault)
+
+	// Вставляем запись о заказе вместе со ссылкой по умолчанию и ID канала
 	err = tx.QueryRow(
-		`INSERT INTO orders (name, category, url_description, url_default, accounts_number_theory, gender) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, accounts_number_fact, date_time`,
-		o.Name, pq.Array(o.Category), o.URLDescription, o.URLDefault, o.AccountsNumberTheory, pq.Array(gender),
+		`INSERT INTO orders (name, category, url_description, url_default, accounts_number_theory, gender, channel_tgid) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, accounts_number_fact, date_time`,
+		o.Name, pq.Array(o.Category), o.URLDescription, o.URLDefault, o.AccountsNumberTheory, pq.Array(gender), channelTGID,
 	).Scan(&o.ID, &o.AccountsNumberFact, &o.DateTime)
 	if err != nil {
 		return nil, err
 	}
 	o.Gender = gender
+	o.ChannelTGID = channelTGID
 
 	// Выбираем свободные аккаунты, исключая мониторинговые,
 	// чтобы такие аккаунты не становились исполнителями заказов
@@ -129,9 +148,9 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 	var o models.Order
 	err = tx.QueryRow(
 		// Приводим gender к text[], иначе pq не сможет сканировать массив enum
-		`SELECT id, name, category, url_description, url_default, accounts_number_theory, accounts_number_fact, gender::text[], date_time FROM orders WHERE id = $1`,
+		`SELECT id, name, category, url_description, url_default, channel_tgid, accounts_number_theory, accounts_number_fact, gender::text[], date_time FROM orders WHERE id = $1`,
 		orderID,
-	).Scan(&o.ID, &o.Name, pq.Array(&o.Category), &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.Gender, &o.DateTime) // читаем текст, категории и ссылку по умолчанию
+	).Scan(&o.ID, &o.Name, pq.Array(&o.Category), &o.URLDescription, &o.URLDefault, &o.ChannelTGID, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.Gender, &o.DateTime) // читаем текст, категории и ссылку по умолчанию
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, err
@@ -216,9 +235,9 @@ func (db *DB) GetOrderByID(id int) (*models.Order, error) {
 	var o models.Order
 	err := db.Conn.QueryRow(
 		// gender приводим к text[], чтобы избежать ошибок сканирования enum-массива
-		`SELECT id, name, category, url_description, url_default, accounts_number_theory, accounts_number_fact, gender::text[], date_time FROM orders WHERE id = $1`,
+		`SELECT id, name, category, url_description, url_default, channel_tgid, accounts_number_theory, accounts_number_fact, gender::text[], date_time FROM orders WHERE id = $1`,
 		id,
-	).Scan(&o.ID, &o.Name, pq.Array(&o.Category), &o.URLDescription, &o.URLDefault, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.Gender, &o.DateTime) // читаем текст, категории и ссылку по умолчанию
+	).Scan(&o.ID, &o.Name, pq.Array(&o.Category), &o.URLDescription, &o.URLDefault, &o.ChannelTGID, &o.AccountsNumberTheory, &o.AccountsNumberFact, &o.Gender, &o.DateTime) // читаем текст, категории и ссылку по умолчанию
 	if err != nil {
 		return nil, err
 	}
