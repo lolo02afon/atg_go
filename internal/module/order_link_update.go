@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"atg_go/internal/httputil"
+	subactive "atg_go/internal/subs_active"
 	telegrammodule "atg_go/pkg/telegram/module"
 
 	"github.com/gin-gonic/gin"
@@ -20,5 +21,10 @@ func (h *Handler) OrderLinkUpdate(c *gin.Context) {
 		httputil.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "links updated"})
+	if err := subactive.ActivateSubscriptions(h.DB); err != nil {
+		log.Printf("[HANDLER ERROR] активные подписки: %v", err)
+		httputil.RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "links updated and subs active"})
 }
