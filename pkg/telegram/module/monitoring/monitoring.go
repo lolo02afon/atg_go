@@ -113,8 +113,22 @@ func run(db *storage.DB) error {
 				SubsActiveReaction: &reaction,
 				SubsActiveRepost:   &repost,
 			}
-			if err := db.CreateChannelPost(cp); err != nil {
+			// Сохраняем пост и получаем его идентификатор для последующей теории
+			postID, err := db.CreateChannelPost(cp)
+			if err != nil {
 				log.Printf("[MONITORING] сохранение поста: %v", err)
+			} else {
+				// Формируем прогноз просмотров по группам часов
+				theory := models.ChannelPostTheory{
+					ChannelPostID:    postID,
+					View1GroupTheory: float64(randomByPercent(view, 20.6, 25.7)),
+					View2GroupTheory: float64(randomByPercent(view, 3.7, 6.3)),
+					View3GroupTheory: float64(randomByPercent(view, 6.7, 11.0)),
+					View4GroupTheory: float64(randomByPercent(view, 20.6, 25.7)),
+				}
+				if err := db.CreateChannelPostTheory(theory); err != nil {
+					log.Printf("[MONITORING] сохранение теории просмотров: %v", err)
+				}
 			}
 		}
 		return nil
