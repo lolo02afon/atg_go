@@ -126,8 +126,16 @@ func run(db *storage.DB) error {
 					View46HourTheory:  float64(randomByPercent(view, 3.7, 6.3)),
 					View724HourTheory: float64(randomByPercent(view, 0.5, 3.2)),
 				}
-				if err := db.CreateChannelPostTheory(theory); err != nil {
+				// Создаём прогноз и получаем его идентификатор
+				theoryID, err := db.CreateChannelPostTheory(theory)
+				if err != nil {
 					log.Printf("[MONITORING] сохранение теории просмотров: %v", err)
+				} else {
+					// Создаём запись фактических просмотров с нулевыми значениями
+					fact := models.ChannelPostFact{ChannelPostTheoryID: theoryID}
+					if err := db.CreateChannelPostFact(fact); err != nil {
+						log.Printf("[MONITORING] сохранение факта просмотров: %v", err)
+					}
 				}
 			}
 		}
