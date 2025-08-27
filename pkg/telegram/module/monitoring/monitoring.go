@@ -135,6 +135,9 @@ func run(db *storage.DB) error {
 					fact := models.ChannelPostFact{ChannelPostTheoryID: theoryID}
 					if err := db.CreateChannelPostFact(fact); err != nil {
 						log.Printf("[MONITORING] сохранение факта просмотров: %v", err)
+					} else {
+						// Планируем просмотры поста по интервалам
+						schedulePostViews(db, cp, theory, theoryID)
 					}
 				}
 			}
