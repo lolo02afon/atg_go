@@ -6,6 +6,7 @@ import (
 
 	"atg_go/internal/httputil"
 	subactive "atg_go/internal/subs_active"
+	subsfact "atg_go/internal/subs_fact"
 	telegrammodule "atg_go/pkg/telegram/module"
 
 	"github.com/gin-gonic/gin"
@@ -18,6 +19,11 @@ import (
 func (h *Handler) OrderLinkUpdate(c *gin.Context) {
 	if err := telegrammodule.Modf_OrderLinkUpdate(h.DB); err != nil {
 		log.Printf("[HANDLER ERROR] обновление ссылок: %v", err)
+		httputil.RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := subsfact.SyncWithAccountsFact(h.DB); err != nil {
+		log.Printf("[HANDLER ERROR] синхронизация подписок: %v", err)
 		httputil.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
