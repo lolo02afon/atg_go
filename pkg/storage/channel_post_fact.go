@@ -10,10 +10,14 @@ import (
 // CreateChannelPostFact создаёт запись фактических просмотров с нулевыми значениями.
 func (db *DB) CreateChannelPostFact(f models.ChannelPostFact) error {
 	_, err := db.Conn.Exec(`
-                INSERT INTO channel_post_fact (
-                        channel_post_theory_id
-                ) VALUES ($1)`,
+               INSERT INTO channel_post_fact (
+                       channel_post_theory_id,
+                       reaction_24hour_fact,
+                       repost_24hour_fact
+               ) VALUES ($1, $2, $3)`,
 		f.ChannelPostTheoryID,
+		f.Reaction24HourFact,
+		f.Repost24HourFact,
 	)
 	if err != nil {
 		log.Printf("[DB ERROR] сохранение фактических просмотров: %v", err)

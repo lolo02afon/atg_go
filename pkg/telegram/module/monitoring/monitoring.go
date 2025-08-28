@@ -120,11 +120,13 @@ func run(db *storage.DB) error {
 			} else {
 				// Формируем прогноз просмотров по группам часов
 				theory := models.ChannelPostTheory{
-					ChannelPostID:     postID,
-					View1HourTheory:   float64(randomByPercent(view, 20.6, 25.7)),
-					View23HourTheory:  float64(randomByPercent(view, 6.7, 11.0)),
-					View46HourTheory:  float64(randomByPercent(view, 3.7, 6.3)),
-					View724HourTheory: float64(randomByPercent(view, 0.5, 3.2)),
+					ChannelPostID:        postID,
+					View1HourTheory:      float64(randomByPercent(view, 20.6, 25.7)),
+					View23HourTheory:     float64(randomByPercent(view, 6.7, 11.0)),
+					View46HourTheory:     float64(randomByPercent(view, 3.7, 6.3)),
+					View724HourTheory:    float64(randomByPercent(view, 0.5, 3.2)),
+					Reaction24HourTheory: reaction,
+					Repost24HourTheory:   repost,
 				}
 				// Создаём прогноз и получаем его идентификатор
 				theoryID, err := db.CreateChannelPostTheory(theory)
