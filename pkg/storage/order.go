@@ -3,7 +3,6 @@ package storage
 import (
 	"atg_go/models"
 	"database/sql"
-	"fmt"
 	"log"
 	"strings"
 
@@ -109,7 +108,8 @@ func (db *DB) CreateOrder(o models.Order) (*models.Order, error) {
 	}
 	defer tx.Rollback()
 
-	// Проверяем существование всех указанных категорий, чтобы заказ не ссылался на неизвестные каналы
+	// Проверяем указанные категории и игнорируем неизвестные.
+	// Так заказ не привязывается к несуществующим каналам, но продолжает создаваться.
 	if len(o.Category) > 0 {
 		rows, err := tx.Query(`SELECT name FROM channels WHERE name = ANY($1)`, pq.Array(o.Category))
 		if err != nil {
@@ -130,16 +130,17 @@ func (db *DB) CreateOrder(o models.Order) (*models.Order, error) {
 			return nil, err
 		}
 
-		// Определяем, какие категории отсутствуют
-		var missing []string
+		// Формируем итоговый список категорий и фиксируем отсутствующие
+		var filtered []string
 		for _, c := range o.Category {
-			if _, ok := found[c]; !ok {
-				missing = append(missing, c)
+			if _, ok := found[c]; ok {
+				filtered = append(filtered, c)
+			} else {
+				// Предупреждаем, что категория не найдена, и продолжаем без неё
+				log.Printf("категория %q не найдена", c)
 			}
 		}
-		if len(missing) > 0 {
-			return nil, fmt.Errorf("категории %v не найдены", missing)
-		}
+		o.Category = filtered
 	}
 
 	// Фильтруем поле gender через общую функцию, чтобы хранить только допустимые значения
@@ -155,12 +156,21 @@ func (db *DB) CreateOrder(o models.Order) (*models.Order, error) {
 		args            []any
 		subsActiveCount sql.NullInt64
 	)
+
+	// Передаём NULL, если после фильтрации категория отсутствует
+	var categoriesArg any
+	if len(o.Category) > 0 {
+		categoriesArg = pq.Array(o.Category)
+	} else {
+		categoriesArg = nil
+	}
+
 	if o.SubsActiveCount != nil {
 		query = `INSERT INTO orders (name, category, url_description, url_default, accounts_number_theory, gender, channel_tgid, subs_active_count) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, accounts_number_fact, date_time, subs_active_count`
-		args = []any{o.Name, pq.Array(o.Category), o.URLDescription, o.URLDefault, o.AccountsNumberTheory, pq.Array(gender), channelTGID, *o.SubsActiveCount}
+		args = []any{o.Name, categoriesArg, o.URLDescription, o.URLDefault, o.AccountsNumberTheory, pq.Array(gender), channelTGID, *o.SubsActiveCount}
 	} else {
 		query = `INSERT INTO orders (name, category, url_description, url_default, accounts_number_theory, gender, channel_tgid) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, accounts_number_fact, date_time, subs_active_count`
-		args = []any{o.Name, pq.Array(o.Category), o.URLDescription, o.URLDefault, o.AccountsNumberTheory, pq.Array(gender), channelTGID}
+		args = []any{o.Name, categoriesArg, o.URLDescription, o.URLDefault, o.AccountsNumberTheory, pq.Array(gender), channelTGID}
 	}
 	if err = tx.QueryRow(query, args...).Scan(&o.ID, &o.AccountsNumberFact, &o.DateTime, &subsActiveCount); err != nil {
 		return nil, err

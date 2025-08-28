@@ -26,7 +26,8 @@ func NewCommentDB(conn *sql.DB) *CommentDB {
 var ErrNoChannel = errors.New("no channel for order")
 
 // GetRandomChannel выбирает случайный URL из каналов, подходящих под категории заказа.
-// Мы фильтруем по заказу, чтобы аккаунт не отправлял активность в чужие тематики.
+// Если у заказа нет категорий, берём случайный канал из всех доступных,
+// чтобы заказ без тематик тоже мог получать активность.
 func (cdb *CommentDB) GetRandomChannel(orderID int) (string, error) {
 	// 1. Загружаем список категорий заказа, иначе не сможем сузить выбор каналов.
 	var categories pq.StringArray
@@ -34,19 +35,28 @@ func (cdb *CommentDB) GetRandomChannel(orderID int) (string, error) {
 		log.Printf("[DB ERROR] получение категорий заказа %d: %v", orderID, err)
 		return "", err
 	}
-	if len(categories) == 0 {
-		// Заказ без категорий не даёт нам критериев отбора, поэтому дальше идти бессмысленно.
-		return "", sql.ErrNoRows
-	}
 
-	// 2. Случайно выбираем один канал из подходящих по категориям.
-	row := cdb.Conn.QueryRow(`
-        SELECT id, name, urls
-        FROM channels
-        WHERE name = ANY($1)
-        ORDER BY RANDOM()
-        LIMIT 1
-    `, pq.Array(categories))
+	// 2. Случайно выбираем один канал.
+	// Если категории заданы, фильтруем по ним, иначе берём канал без ограничений.
+	var row *sql.Row
+	if len(categories) == 0 {
+		// Категорий нет — выбираем любой канал.
+		row = cdb.Conn.QueryRow(`
+                SELECT id, name, urls
+                FROM channels
+                ORDER BY RANDOM()
+                LIMIT 1
+            `)
+	} else {
+		// Категории есть — ограничиваем выбор.
+		row = cdb.Conn.QueryRow(`
+                SELECT id, name, urls
+                FROM channels
+                WHERE name = ANY($1)
+                ORDER BY RANDOM()
+                LIMIT 1
+            `, pq.Array(categories))
+	}
 
 	var channel models.Channel
 	var urlsJSON []byte
