@@ -229,7 +229,7 @@ func (db *DB) UpdateOrderAccountsNumber(orderID, newNumber int) (*models.Order, 
 		// Приводим gender к text[], иначе pq не сможет сканировать массив enum
 		`SELECT id, name, category, url_description, url_default, channel_tgid, accounts_number_theory, accounts_number_fact, subs_active_count, gender::text[], date_time FROM orders WHERE id = $1`,
 		orderID,
-	).Scan(&o.ID, &o.Name, pq.Array(&o.Category), &o.URLDescription, &o.URLDefault, &o.ChannelTGID, &o.AccountsNumberTheory, &o.AccountsNumberFact, &subsActiveCount, &o.Gender, &o.DateTime) // читаем текст, категории и ссылку по умолчанию
+	).Scan(&o.ID, &o.Name, &o.Category, &o.URLDescription, &o.URLDefault, &o.ChannelTGID, &o.AccountsNumberTheory, &o.AccountsNumberFact, &subsActiveCount, &o.Gender, &o.DateTime) // читаем текст, категории (pq.StringArray сканируется напрямую) и ссылку по умолчанию
 	if subsActiveCount.Valid {
 		val := int(subsActiveCount.Int64)
 		o.SubsActiveCount = &val
@@ -323,7 +323,7 @@ func (db *DB) GetOrderByID(id int) (*models.Order, error) {
 		// gender приводим к text[], чтобы избежать ошибок сканирования enum-массива
 		`SELECT id, name, category, url_description, url_default, channel_tgid, accounts_number_theory, accounts_number_fact, subs_active_count, gender::text[], date_time FROM orders WHERE id = $1`,
 		id,
-	).Scan(&o.ID, &o.Name, pq.Array(&o.Category), &o.URLDescription, &o.URLDefault, &o.ChannelTGID, &o.AccountsNumberTheory, &o.AccountsNumberFact, &subsActiveCount, &o.Gender, &o.DateTime) // читаем текст, категории и ссылку по умолчанию
+	).Scan(&o.ID, &o.Name, &o.Category, &o.URLDescription, &o.URLDefault, &o.ChannelTGID, &o.AccountsNumberTheory, &o.AccountsNumberFact, &subsActiveCount, &o.Gender, &o.DateTime) // читаем текст, категории (pq.StringArray сканируется напрямую) и ссылку по умолчанию
 	if subsActiveCount.Valid {
 		val := int(subsActiveCount.Int64)
 		o.SubsActiveCount = &val
