@@ -109,9 +109,9 @@ func (db *DB) CreateOrder(o models.Order) (*models.Order, error) {
 	defer tx.Rollback()
 
 	// Проверяем указанные категории и игнорируем неизвестные.
-	// Так заказ не привязывается к несуществующим каналам, но продолжает создаваться.
+	// Так заказ не привязывается к несуществующим категориям, но продолжает создаваться.
 	if len(o.Category) > 0 {
-		rows, err := tx.Query(`SELECT name FROM channels WHERE name = ANY($1)`, pq.Array(o.Category))
+		rows, err := tx.Query(`SELECT name FROM categories WHERE name = ANY($1)`, pq.Array(o.Category))
 		if err != nil {
 			return nil, err
 		}

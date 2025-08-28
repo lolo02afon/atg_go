@@ -41,9 +41,9 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 	c.JSON(200, created)
 }
 
-// GetCategories возвращает список доступных категорий из таблицы channels
+// GetCategories возвращает список доступных категорий из таблицы categories
 func (h *Handler) GetCategories(c *gin.Context) {
-	names, err := h.DB.GetChannelNames()
+	names, err := h.DB.GetCategoryNames()
 	if err != nil {
 		httputil.RespondError(c, 500, "db error")
 		return
