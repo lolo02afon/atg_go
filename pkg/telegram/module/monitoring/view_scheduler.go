@@ -3,6 +3,8 @@ package monitoring
 import (
 	"log"
 	"math/rand"
+	"strconv"
+	"strings"
 	"time"
 
 	"atg_go/models"
@@ -14,7 +16,27 @@ import (
 // Для каждого интервала создаётся фоновая задача, которая вызывает просмотр поста
 // выбранным аккаунтом и увеличивает соответствующее поле факта.
 func schedulePostViews(db *storage.DB, post models.ChannelPost, theory models.ChannelPostTheory, theoryID int) {
-	accounts, err := db.GetAuthorizedAccounts()
+	// Определяем ID канала заказа
+	order, err := db.GetOrderByID(post.OrderID)
+	if err != nil || order.ChannelTGID == nil {
+		log.Printf("[MONITORING] не удалось получить канал заказа: %v", err)
+		return
+	}
+	channelID, err := strconv.Atoi(*order.ChannelTGID)
+	if err != nil {
+		log.Printf("[MONITORING] некорректный channel_tgid %s: %v", *order.ChannelTGID, err)
+		return
+	}
+	// Извлекаем идентификатор поста из ссылки
+	parts := strings.Split(strings.TrimSuffix(post.PostURL, "/"), "/")
+	msgID, err := strconv.Atoi(parts[len(parts)-1])
+	if err != nil {
+		log.Printf("[MONITORING] некорректная ссылка на пост: %v", err)
+		return
+	}
+
+	// Выбираем аккаунты, подписанные на канал заказа и ещё не просмотревшие пост
+	accounts, err := db.GetAccountsForPostView(post.OrderID, channelID, msgID)
 	if err != nil || len(accounts) == 0 {
 		log.Printf("[MONITORING] не удалось получить аккаунты для просмотров: %v", err)
 		return
