@@ -18,9 +18,9 @@ import (
 )
 
 type orderInfo struct {
-	id              int
-	url             string
-	subsActiveCount *int
+	id                 int
+	url                string
+	accountsNumberFact int
 }
 
 // randomByPercent возвращает число, равное случайному проценту от base.
@@ -89,18 +89,8 @@ func run(db *storage.DB) error {
 			postTime := time.Unix(int64(msg.Date), 0)
 			link := strings.TrimSuffix(o.url, "/") + "/" + strconv.Itoa(msg.ID)
 
-			// Определяем требуемые значения активной аудитории
-			view := 0
-			if o.subsActiveCount != nil {
-				view = *o.subsActiveCount
-			} else {
-				accounts, err := db.GetAuthorizedAccounts()
-				if err != nil {
-					log.Printf("[MONITORING] подсчёт аккаунтов: %v", err)
-				} else {
-					view = len(accounts)
-				}
-			}
+			// Берём целевое число просмотров из фактического количества аккаунтов заказа
+			view := o.accountsNumberFact
 
 			// Реакции: от 0.5% до 2% от целевого числа просмотров
 			reaction := randomByPercent(view, 0.5, 2)
@@ -191,7 +181,7 @@ func run(db *storage.DB) error {
 			if o.ChannelTGID == nil {
 				_ = db.SetOrderChannelTGID(o.ID, fmt.Sprintf("%d", ch.ID))
 			}
-			orderMap[ch.ID] = orderInfo{id: o.ID, url: o.URLDefault, subsActiveCount: o.SubsActiveCount}
+			orderMap[ch.ID] = orderInfo{id: o.ID, url: o.URLDefault, accountsNumberFact: o.AccountsNumberFact}
 		}
 
 		// держим соединение активным, пока контекст не будет отменён

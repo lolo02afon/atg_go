@@ -48,10 +48,10 @@ func (db *DB) GetOrdersDefaultURLs() ([]string, error) {
 	return urls, nil
 }
 
-// GetOrdersForMonitoring возвращает заказы с их ссылками, ID каналов и числом активной аудитории.
+// GetOrdersForMonitoring возвращает заказы с их ссылками, ID каналов, фактическим числом аккаунтов и числом активной аудитории.
 // Эти данные нужны мониторинговым аккаунтам для подписки на каналы и расчёта метрик постов.
 func (db *DB) GetOrdersForMonitoring() ([]models.Order, error) {
-	rows, err := db.Conn.Query(`SELECT id, url_default, channel_tgid, subs_active_count FROM orders WHERE url_default <> ''`)
+	rows, err := db.Conn.Query(`SELECT id, url_default, channel_tgid, accounts_number_fact, subs_active_count FROM orders WHERE url_default <> ''`)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (db *DB) GetOrdersForMonitoring() ([]models.Order, error) {
 	var orders []models.Order
 	for rows.Next() {
 		var o models.Order
-		if err := rows.Scan(&o.ID, &o.URLDefault, &o.ChannelTGID, &o.SubsActiveCount); err != nil {
+		if err := rows.Scan(&o.ID, &o.URLDefault, &o.ChannelTGID, &o.AccountsNumberFact, &o.SubsActiveCount); err != nil {
 			return nil, err
 		}
 		orders = append(orders, o)
