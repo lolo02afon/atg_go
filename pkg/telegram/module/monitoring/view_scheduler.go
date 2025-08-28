@@ -9,12 +9,12 @@ import (
 
 	"atg_go/models"
 	"atg_go/pkg/storage"
+	postaction "atg_go/pkg/telegram/post"
 	view "atg_go/pkg/telegram/view"
 )
 
-// schedulePostViews равномерно распределяет просмотры поста по временным промежуткам.
-// Для каждого интервала создаётся фоновая задача, которая вызывает просмотр поста
-// выбранным аккаунтом и увеличивает соответствующее поле факта.
+// schedulePostViews распределяет просмотры, реакции и репосты поста по времени.
+// Реакции и репосты выполняются вместе с просмотром, но не при каждом просмотре.
 func schedulePostViews(db *storage.DB, post models.ChannelPost, theory models.ChannelPostTheory, theoryID int) {
 	// Определяем ID канала заказа
 	order, err := db.GetOrderByID(post.OrderID)
@@ -56,6 +56,15 @@ func schedulePostViews(db *storage.DB, post models.ChannelPost, theory models.Ch
 		{int(theory.View724HourTheory), 7 * time.Hour, 24 * time.Hour, "view_7_24hour_fact"},
 	}
 
+	// Подготавливаем счётчики оставшихся действий для равномерного распределения
+	totalViews := 0
+	for _, p := range periods {
+		totalViews += p.count
+	}
+	viewsLeft := totalViews
+	reactionsLeft := theory.Reaction24HourTheory
+	repostsLeft := theory.Repost24HourTheory
+
 	for _, p := range periods {
 		if p.count <= 0 {
 			continue
@@ -67,7 +76,22 @@ func schedulePostViews(db *storage.DB, post models.ChannelPost, theory models.Ch
 			if delay < 0 {
 				delay = 0
 			}
-			go func(a models.Account, column string, d time.Duration) {
+
+			// Определяем, нужны ли реакция и репост для данного просмотра
+			react, repost := false, false
+			if viewsLeft > 0 {
+				if reactionsLeft > 0 && rand.Float64() < float64(reactionsLeft)/float64(viewsLeft) {
+					react = true
+					reactionsLeft--
+				}
+				if repostsLeft > 0 && rand.Float64() < float64(repostsLeft)/float64(viewsLeft) {
+					repost = true
+					repostsLeft--
+				}
+				viewsLeft--
+			}
+
+			go func(a models.Account, column string, d time.Duration, doReact, doRepost bool) {
 				time.AfterFunc(d, func() {
 					if err := view.ViewPost(db, a, post.PostURL); err != nil {
 						log.Printf("[MONITORING] просмотр поста не выполнен: %v", err)
@@ -76,8 +100,22 @@ func schedulePostViews(db *storage.DB, post models.ChannelPost, theory models.Ch
 					if err := db.IncrementChannelPostFact(theoryID, column); err != nil {
 						log.Printf("[MONITORING] обновление факта просмотров: %v", err)
 					}
+					if doReact {
+						if err := postaction.SendReaction(db, a, post.PostURL); err != nil {
+							log.Printf("[MONITORING] реакция не выполнена: %v", err)
+						} else if err := db.IncrementChannelPostFact(theoryID, "reaction_24hour_fact"); err != nil {
+							log.Printf("[MONITORING] обновление факта реакций: %v", err)
+						}
+					}
+					if doRepost {
+						if err := postaction.SendRepost(db, a, post.PostURL); err != nil {
+							log.Printf("[MONITORING] репост не выполнен: %v", err)
+						} else if err := db.IncrementChannelPostFact(theoryID, "repost_24hour_fact"); err != nil {
+							log.Printf("[MONITORING] обновление факта репостов: %v", err)
+						}
+					}
 				})
-			}(acc, p.column, delay)
+			}(acc, p.column, delay, react, repost)
 		}
 	}
 }
