@@ -12,9 +12,9 @@ import (
 // rnd нужен для пауз между подписками.
 var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
 
-// SyncWithAccountsFact приводит количество подписок в order_account_subs
-// в соответствие с полем accounts_number_fact заказа.
-func SyncWithAccountsFact(db *storage.DB) error {
+// SyncWithSubsActiveCount приводит количество подписок в order_account_subs
+// в соответствие с полем subs_active_count заказа.
+func SyncWithSubsActiveCount(db *storage.DB) error {
 	orders, err := db.GetOrdersForMonitoring()
 	if err != nil {
 		return err
@@ -25,8 +25,12 @@ func SyncWithAccountsFact(db *storage.DB) error {
 			log.Printf("[SUBS_FACT] не удалось получить количество подписок для заказа %d: %v", o.ID, err)
 			continue
 		}
-		if current < o.AccountsNumberFact {
-			need := o.AccountsNumberFact - current
+		target := 0
+		if o.SubsActiveCount != nil && *o.SubsActiveCount > 0 {
+			target = *o.SubsActiveCount
+		}
+		if current < target {
+			need := target - current
 			accounts, err := db.GetRandomAccountsForOrder(o.ID, need)
 			if err != nil {
 				log.Printf("[SUBS_FACT] не удалось выбрать аккаунты для заказа %d: %v", o.ID, err)
@@ -42,8 +46,8 @@ func SyncWithAccountsFact(db *storage.DB) error {
 				}
 				time.Sleep(time.Duration(rnd.Intn(3)+2) * time.Second)
 			}
-		} else if current > o.AccountsNumberFact {
-			excess := current - o.AccountsNumberFact
+		} else if current > target {
+			excess := current - target
 			if err := db.RemoveOrderAccountSubs(o.ID, excess); err != nil {
 				log.Printf("[SUBS_FACT] не удалось удалить лишние подписки заказа %d: %v", o.ID, err)
 			}

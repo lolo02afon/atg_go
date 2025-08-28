@@ -22,7 +22,7 @@ func (h *Handler) OrderLinkUpdate(c *gin.Context) {
 		httputil.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := subsfact.SyncWithAccountsFact(h.DB); err != nil {
+	if err := subsfact.SyncWithSubsActiveCount(h.DB); err != nil {
 		log.Printf("[HANDLER ERROR] синхронизация подписок: %v", err)
 		httputil.RespondError(c, http.StatusInternalServerError, err.Error())
 		return

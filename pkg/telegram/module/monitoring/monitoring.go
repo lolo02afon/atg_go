@@ -17,10 +17,13 @@ import (
 	"github.com/gotd/td/tg"
 )
 
+// orderInfo хранит сведения о заказе, необходимые для расчёта метрик.
+// subsActiveCount указывает, сколько аккаунтов подписались на канал заказа
+// и готовы просматривать посты.
 type orderInfo struct {
-	id                 int
-	url                string
-	accountsNumberFact int
+	id              int
+	url             string
+	subsActiveCount *int
 }
 
 // randomByPercent возвращает число, равное случайному проценту от base.
@@ -89,21 +92,32 @@ func run(db *storage.DB) error {
 			postTime := time.Unix(int64(msg.Date), 0)
 			link := strings.TrimSuffix(o.url, "/") + "/" + strconv.Itoa(msg.ID)
 
-			// Берём целевое число просмотров из фактического количества аккаунтов заказа
-			view := o.accountsNumberFact
+			// Берём целевое число просмотров из количества активных подписчиков заказа
+			var view int
+			if o.subsActiveCount != nil {
+				view = *o.subsActiveCount
+			}
 
 			// Реакции: от 0.5% до 2% от целевого числа просмотров
 			reaction := randomByPercent(view, 0.5, 2)
 			// Репосты: от 2% до 10% от целевого числа просмотров
 			repost := randomByPercent(view, 2, 10)
 
+			// Указатели устанавливаются только при наличии целевого значения просмотров
+			var viewPtr, reactionPtr, repostPtr *int
+			if o.subsActiveCount != nil {
+				viewPtr = &view
+				reactionPtr = &reaction
+				repostPtr = &repost
+			}
+
 			cp := models.ChannelPost{
 				OrderID:            o.id,
 				PostDateTime:       postTime,
 				PostURL:            link,
-				SubsActiveView:     &view,
-				SubsActiveReaction: &reaction,
-				SubsActiveRepost:   &repost,
+				SubsActiveView:     viewPtr,
+				SubsActiveReaction: reactionPtr,
+				SubsActiveRepost:   repostPtr,
 			}
 			// Сохраняем пост и получаем его идентификатор для последующей теории
 			postID, err := db.CreateChannelPost(cp)
@@ -181,7 +195,7 @@ func run(db *storage.DB) error {
 			if o.ChannelTGID == nil {
 				_ = db.SetOrderChannelTGID(o.ID, fmt.Sprintf("%d", ch.ID))
 			}
-			orderMap[ch.ID] = orderInfo{id: o.ID, url: o.URLDefault, accountsNumberFact: o.AccountsNumberFact}
+			orderMap[ch.ID] = orderInfo{id: o.ID, url: o.URLDefault, subsActiveCount: o.SubsActiveCount}
 		}
 
 		// держим соединение активным, пока контекст не будет отменён
