@@ -17,6 +17,9 @@ const ActivityTypeReaction = "reaction"
 // ActivityTypeComment — значение поля activity_type для комментариев.
 const ActivityTypeComment = "comment"
 
+// ActivityTypeSubsActiveView — значение поля activity_type для просмотров поста.
+const ActivityTypeSubsActiveView = "subs_active_view"
+
 // SaveActivity сохраняет действие аккаунта в таблице activity вместе со временем.
 // messageID — идентификатор сообщения: для ActivityTypeReaction это ID сообщения
 // из чата обсуждения, для ActivityTypeComment — ID поста канала.
@@ -45,6 +48,12 @@ func (db *DB) SaveReaction(accountID, channelID, messageID int) error {
 // а не идентификатор сообщения из обсуждения.
 func (db *DB) SaveComment(accountID, channelID, messageID int) error {
 	return db.SaveActivity(accountID, channelID, messageID, ActivityTypeComment)
+}
+
+// SaveSubsActiveView сохраняет информацию о просмотре поста активной аудиторией.
+// messageID должен быть ID поста, который был открыт для увеличения счётчика просмотров.
+func (db *DB) SaveSubsActiveView(accountID, channelID, messageID int) error {
+	return db.SaveActivity(accountID, channelID, messageID, ActivityTypeSubsActiveView)
 }
 
 // HasCommentForPost проверяет, существует ли комментарий для поста с указанным
