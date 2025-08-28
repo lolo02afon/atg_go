@@ -102,8 +102,10 @@ func run(db *storage.DB) error {
 				}
 			}
 
-			reaction := randomByPercent(view, 1, 5)
-			repost := randomByPercent(view, 0.5, 1.5)
+			// Реакции: от 0.5% до 2% от целевого числа просмотров
+			reaction := randomByPercent(view, 0.5, 2)
+			// Репосты: от 2% до 10% от целевого числа просмотров
+			repost := randomByPercent(view, 2, 10)
 
 			cp := models.ChannelPost{
 				OrderID:            o.id,
