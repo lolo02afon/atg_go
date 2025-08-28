@@ -18,3 +18,9 @@ func SaveReactionActivity(db *storage.DB, accountID, channelID, messageID int) e
 func SaveCommentActivity(db *storage.DB, accountID, channelID, messageID int) error {
 	return db.SaveComment(accountID, channelID, messageID)
 }
+
+// SaveViewActivity фиксирует просмотр поста активной аудиторией.
+// messageID — идентификатор поста канала, открытого для увеличения просмотров.
+func SaveViewActivity(db *storage.DB, accountID, channelID, messageID int) error {
+	return db.SaveSubsActiveView(accountID, channelID, messageID)
+}

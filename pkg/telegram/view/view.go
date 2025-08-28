@@ -56,6 +56,10 @@ func ViewPost(db *storage.DB, acc models.Account, postURL string) error {
 			ID:        []int{msgID},
 			Increment: true,
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		// Сохраняем факт просмотра в таблице активности
+		return module.SaveViewActivity(db, acc.ID, int(ch.ID), msgID)
 	})
 }
