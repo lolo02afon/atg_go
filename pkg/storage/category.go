@@ -2,10 +2,10 @@ package storage
 
 import "database/sql"
 
-// GetChannelNames возвращает список названий всех каналов
+// GetCategoryNames возвращает список названий всех категорий
 // Используется для заполнения выпадающего списка категорий заказов
-func (db *DB) GetChannelNames() ([]string, error) {
-	rows, err := db.Conn.Query(`SELECT name FROM channels`)
+func (db *DB) GetCategoryNames() ([]string, error) {
+	rows, err := db.Conn.Query(`SELECT name FROM categories`)
 	if err != nil {
 		return nil, err
 	}

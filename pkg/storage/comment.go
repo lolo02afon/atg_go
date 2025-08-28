@@ -36,49 +36,49 @@ func (cdb *CommentDB) GetRandomChannel(orderID int) (string, error) {
 		return "", err
 	}
 
-	// 2. Случайно выбираем один канал.
-	// Если категории заданы, фильтруем по ним, иначе берём канал без ограничений.
+	// 2. Случайно выбираем одну категорию.
+	// Если категории заданы, фильтруем по ним, иначе берём категорию без ограничений.
 	var row *sql.Row
 	if len(categories) == 0 {
-		// Категорий нет — выбираем любой канал.
+		// Категорий нет — выбираем любую категорию.
 		row = cdb.Conn.QueryRow(`
-                SELECT id, name, urls
-                FROM channels
-                ORDER BY RANDOM()
-                LIMIT 1
-            `)
+               SELECT id, name, urls
+               FROM categories
+               ORDER BY RANDOM()
+               LIMIT 1
+           `)
 	} else {
 		// Категории есть — ограничиваем выбор.
 		row = cdb.Conn.QueryRow(`
-                SELECT id, name, urls
-                FROM channels
-                WHERE name = ANY($1)
-                ORDER BY RANDOM()
-                LIMIT 1
-            `, pq.Array(categories))
+               SELECT id, name, urls
+               FROM categories
+               WHERE name = ANY($1)
+               ORDER BY RANDOM()
+               LIMIT 1
+           `, pq.Array(categories))
 	}
 
-	var channel models.Channel
+	var category models.Category
 	var urlsJSON []byte
-	if err := row.Scan(&channel.ID, &channel.Name, &urlsJSON); err != nil {
+	if err := row.Scan(&category.ID, &category.Name, &urlsJSON); err != nil {
 		// Передаём ошибку дальше, чтобы вызывающая сторона могла решить, как реагировать на пустую выборку.
-		log.Printf("[DB ERROR] выбор канала по заказу %d: %v", orderID, err)
+		log.Printf("[DB ERROR] выбор категории по заказу %d: %v", orderID, err)
 		return "", err
 	}
 
 	// 3. Превращаем JSON-массив ссылок в удобный для случайного выбора срез.
-	if err := json.Unmarshal(urlsJSON, &channel.URLs); err != nil {
-		log.Printf("[DB ERROR] парсинг ссылок канала %d: %v", channel.ID, err)
+	if err := json.Unmarshal(urlsJSON, &category.URLs); err != nil {
+		log.Printf("[DB ERROR] парсинг ссылок категории %d: %v", category.ID, err)
 		return "", err
 	}
-	if len(channel.URLs) == 0 {
-		// Без ссылок канал не пригоден для активности.
+	if len(category.URLs) == 0 {
+		// Без ссылок категория не пригодна для активности.
 		return "", sql.ErrNoRows
 	}
 
 	// 4. Выбираем одну ссылку случайным образом, чтобы равномерно распределять нагрузку по URL.
 	rand.Seed(time.Now().UnixNano())
-	url := channel.URLs[rand.Intn(len(channel.URLs))]
+	url := category.URLs[rand.Intn(len(category.URLs))]
 	log.Printf("[DB] выбран канал %s для заказа %d", url, orderID)
 
 	return url, nil
