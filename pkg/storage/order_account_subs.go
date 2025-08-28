@@ -15,6 +15,15 @@ func (db *DB) AddOrderAccountSub(orderID, accountID int) error {
 	return err
 }
 
+// RemoveOrderAccountSubs удаляет заданное количество подписок для конкретного заказа.
+// Какие записи удалять, значения не имеет, поэтому выбираем произвольные по id.
+func (db *DB) RemoveOrderAccountSubs(orderID, limit int) error {
+	_, err := db.Conn.Exec(`DELETE FROM order_account_subs WHERE id IN (
+        SELECT id FROM order_account_subs WHERE order_id = $1 ORDER BY id DESC LIMIT $2
+    )`, orderID, limit)
+	return err
+}
+
 // GetRandomAccountsForOrder выбирает случайные авторизованные аккаунты,
 // которые ещё не подписаны на канал указанного заказа и не помечены как мониторинговые.
 func (db *DB) GetRandomAccountsForOrder(orderID, limit int) ([]models.Account, error) {
