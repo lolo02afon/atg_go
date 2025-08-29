@@ -122,12 +122,29 @@ func run(db *storage.DB) error {
 				log.Printf("[MONITORING] сохранение поста: %v", err)
 			} else {
 				// Формируем прогноз просмотров по группам часов
+				// и ограничиваем суммарное значение фактическим максимумом
+				view1 := randomByPercent(view, 20.6, 25.7)
+				remain := view - view1
+				view23 := randomByPercent(view, 17.2, 21.7)
+				if view23 > remain {
+					view23 = remain
+				}
+				remain -= view23
+				view46 := randomByPercent(view, 14.9, 19.4)
+				if view46 > remain {
+					view46 = remain
+				}
+				remain -= view46
+				view724 := randomByPercent(view, 31.9, 39.4)
+				if view724 > remain {
+					view724 = remain
+				}
 				theory := models.ChannelPostTheory{
 					ChannelPostID:        postID,
-					View1HourTheory:      float64(randomByPercent(view, 20.6, 25.7)),
-					View23HourTheory:     float64(randomByPercent(view, 6.7, 11.0)),
-					View46HourTheory:     float64(randomByPercent(view, 3.7, 6.3)),
-					View724HourTheory:    float64(randomByPercent(view, 0.5, 3.2)),
+					View1HourTheory:      float64(view1),
+					View23HourTheory:     float64(view23),
+					View46HourTheory:     float64(view46),
+					View724HourTheory:    float64(view724),
 					Reaction24HourTheory: reaction,
 					Repost24HourTheory:   repost,
 				}
