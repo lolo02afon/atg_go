@@ -2,14 +2,13 @@ package main
 
 import (
 	"atg_go/internal/auth"
-	chduplicate "atg_go/internal/channel_duplicate"
 	"atg_go/internal/comments"
 	"atg_go/internal/middleware"
 	module "atg_go/internal/module"
-	monitoring "atg_go/internal/module/monitoring"
 	orders "atg_go/internal/order"
 	reaction "atg_go/internal/reaction"
 	statistics "atg_go/internal/statistics"
+	telegram "atg_go/internal/telegram"
 	"atg_go/pkg/storage"
 	"database/sql"
 	"log"
@@ -41,9 +40,8 @@ func main() {
 	db := storage.NewDB(dbConn)               // Для работы с аккаунтами
 	commentDB := storage.NewCommentDB(dbConn) // Для работы с каналами
 
-	// Запускаем фоновые процессы мониторинга и дублирования
-	monitoring.Run(db)
-	chduplicate.Run(db)
+	// Запускаем фоновые процессы Telegram один раз
+	telegram.Run(db)
 
 	// Настройка роутера
 	r := setupRouter(db, commentDB)
