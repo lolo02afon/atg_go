@@ -143,7 +143,8 @@ func openMedia(ctx context.Context, api *tg.Client, m *tg.Message) error {
 }
 
 // downloadToTemp сохраняет вложение во временный файл и удаляет его после использования.
-func downloadToTemp(ctx context.Context, d *downloader.Downloader, api *tg.Client, loc downloader.Location) error {
+// loc описывает путь к файлу в Telegram.
+func downloadToTemp(ctx context.Context, d *downloader.Downloader, api *tg.Client, loc tg.InputFileLocationClass) error {
 	// Создаём временный файл в системной директории
 	f, err := os.CreateTemp("", "tg-media-*")
 	if err != nil {
