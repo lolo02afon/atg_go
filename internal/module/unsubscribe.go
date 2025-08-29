@@ -23,7 +23,7 @@ import (
 //	}
 //
 // Ответ (200, JSON):
-// { "status": "completed" }
+// { "status": "запущено" }
 //
 // Возможные ошибки:
 // - 400: неверный формат запроса
@@ -54,9 +54,10 @@ func (h *Handler) Unsubscribe(c *gin.Context) {
 	delayRange := [2]int{req.Delay[0], req.Delay[1]}
 	log.Printf("[UNSUBSCRIBE] запрос: delay=%v, count=%d", delayRange, req.NumberChannelsOrGroups)
 
-	if err := telegrammodule.ModF_UnsubscribeAll(h.DB, delayRange, req.NumberChannelsOrGroups); err != nil {
-		httputil.RespondError(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"status": "completed"})
+	go func() {
+		if err := telegrammodule.ModF_UnsubscribeAll(h.DB, delayRange, req.NumberChannelsOrGroups); err != nil {
+			log.Printf("[UNSUBSCRIBE] ошибка: %v", err)
+		}
+	}()
+	c.JSON(http.StatusOK, gin.H{"status": "запущено"})
 }
