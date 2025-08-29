@@ -59,8 +59,15 @@ func (db *DB) GetOrdersForMonitoring() ([]models.Order, error) {
 	var orders []models.Order
 	for rows.Next() {
 		var o models.Order
-		if err := rows.Scan(&o.ID, &o.URLDefault, &o.ChannelTGID, &o.AccountsNumberFact, &o.SubsActiveCount); err != nil {
+		var subsActiveCount sql.NullInt64 // временно читаем значение, чтобы обработать NULL
+		if err := rows.Scan(&o.ID, &o.URLDefault, &o.ChannelTGID, &o.AccountsNumberFact, &subsActiveCount); err != nil {
 			return nil, err
+		}
+		if subsActiveCount.Valid {
+			val := int(subsActiveCount.Int64)
+			o.SubsActiveCount = &val
+		} else {
+			o.SubsActiveCount = nil
 		}
 		orders = append(orders, o)
 	}
