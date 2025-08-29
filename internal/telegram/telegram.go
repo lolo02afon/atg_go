@@ -53,8 +53,9 @@ func run(db *storage.DB) error {
 	ctx := context.Background()
 	return client.Run(ctx, func(ctx context.Context) error {
 		api := tg.NewClient(client)
-		tgmonitor.Connect(ctx, api, dispatcher, db, acc.ID)
-		tgdup.Connect(ctx, api, dispatcher, db, acc.ID)
+		// Передаём указатель на диспетчер, так как модули ожидают *tg.UpdateDispatcher.
+		tgmonitor.Connect(ctx, api, &dispatcher, db, acc.ID)
+		tgdup.Connect(ctx, api, &dispatcher, db, acc.ID)
 		<-ctx.Done()
 		return nil
 	})
