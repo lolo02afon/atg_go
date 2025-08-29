@@ -3,8 +3,8 @@ package view
 import (
 	"context"
 	"fmt"
-	"io"
 	"math/rand"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -124,8 +124,7 @@ func openMedia(ctx context.Context, api *tg.Client, m *tg.Message) error {
 			FileReference: photo.FileReference,
 			ThumbSize:     size,
 		}
-		_, err := d.Download(api, loc).Stream(ctx, io.Discard)
-		return err
+		return downloadToTemp(ctx, d, api, loc)
 	case *tg.MessageMediaDocument:
 		doc, ok := media.Document.(*tg.Document)
 		if !ok {
@@ -137,11 +136,28 @@ func openMedia(ctx context.Context, api *tg.Client, m *tg.Message) error {
 			FileReference: doc.FileReference,
 			ThumbSize:     "",
 		}
-		_, err := d.Download(api, loc).Stream(ctx, io.Discard)
-		return err
+		return downloadToTemp(ctx, d, api, loc)
 	default:
 		return nil
 	}
+}
+
+// downloadToTemp сохраняет вложение во временный файл и удаляет его после использования.
+func downloadToTemp(ctx context.Context, d *downloader.Downloader, api *tg.Client, loc downloader.Location) error {
+	// Создаём временный файл в системной директории
+	f, err := os.CreateTemp("", "tg-media-*")
+	if err != nil {
+		return err
+	}
+	// Закрываем и удаляем файл после завершения скачивания
+	defer func() {
+		_ = f.Close()
+		os.Remove(f.Name())
+	}()
+
+	// Сохраняем содержимое в файл
+	_, err = d.Download(api, loc).Stream(ctx, f)
+	return err
 }
 
 // viewDelay выбирает задержку просмотра в зависимости от типа содержимого сообщения.
