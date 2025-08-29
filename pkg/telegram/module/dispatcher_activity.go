@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"math"
 	"math/rand"
 	"net/http"
 	"strings"
@@ -37,6 +38,91 @@ type ActiveSessionsDisconnectSettings struct {
 	DispatcherStart string `json:"dispatcher_start"`
 }
 
+// runActivityInPeriod равномерно распределяет запросы активности
+// в пределах заданного периода, учитывая текущее время по МСК.
+// Функция вычисляет, сколько действий осталось выполнить,
+// и запускает их в оставшееся окно.
+func runActivityInPeriod(ctx context.Context, base time.Time, loc *time.Location, act ActivityRequest, cfg ActivitySettings, offset int) {
+	// Парсим временные границы выполнения
+	startTime, err1 := time.Parse("15:04", cfg.DispatcherPeriod[0])
+	endTime, err2 := time.Parse("15:04", cfg.DispatcherPeriod[1])
+	if err1 != nil || err2 != nil {
+		return
+	}
+
+	startMin := startTime.Hour()*60 + startTime.Minute()
+	endMin := endTime.Hour()*60 + endTime.Minute()
+	minAct := cfg.DispatcherActivityMax[0]
+	maxAct := cfg.DispatcherActivityMax[1]
+	if endMin <= startMin || maxAct < minAct {
+		return
+	}
+
+	// Определяем общее количество действий на весь период
+	totalCount := rand.Intn(maxAct-minAct+1) + minAct
+
+	currentDay := base.AddDate(0, 0, offset)
+	windowStart := time.Date(currentDay.Year(), currentDay.Month(), currentDay.Day(), startTime.Hour(), startTime.Minute(), 0, 0, loc)
+	windowEnd := time.Date(currentDay.Year(), currentDay.Month(), currentDay.Day(), endTime.Hour(), endTime.Minute(), 0, 0, loc)
+
+	now := time.Now().In(loc)
+	if now.After(windowEnd) {
+		// Период уже закончился
+		return
+	}
+
+	totalDuration := windowEnd.Sub(windowStart)
+
+	var scheduleStart time.Time
+	var duration time.Duration
+	var count int
+
+	if now.Before(windowStart) {
+		// До начала окна — выполняем весь объём
+		scheduleStart = windowStart
+		duration = totalDuration
+		count = totalCount
+	} else {
+		// Начало окна прошло — рассчитываем оставшееся количество
+		scheduleStart = now
+		duration = windowEnd.Sub(now)
+		remainingFraction := float64(duration) / float64(totalDuration)
+		count = int(math.Ceil(float64(totalCount) * remainingFraction))
+		if count <= 0 {
+			return
+		}
+	}
+
+	interval := duration / time.Duration(count)
+
+	for i := 0; i < count; i++ {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		t := scheduleStart.Add(interval * time.Duration(i))
+		sleep := t.Sub(time.Now().In(loc))
+		if sleep > 0 {
+			select {
+			case <-time.After(sleep):
+			case <-ctx.Done():
+				return
+			}
+		}
+
+		payload, _ := json.Marshal(act.RequestBody)
+		req, err := http.NewRequestWithContext(ctx, "POST", act.URL, bytes.NewBuffer(payload))
+		if err != nil {
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+bearerToken)
+		http.DefaultClient.Do(req)
+	}
+}
+
 // ModF_DispatcherActivity выполняет запросы активности в течение
 // заданного количества суток и реагирует на отмену контекста.
 func ModF_DispatcherActivity(ctx context.Context, daysNumber int, activities []ActivityRequest, commentCfg, reactionCfg ActivitySettings, unsubscribeCfg UnsubscribeSettings, disconnectCfg ActiveSessionsDisconnectSettings) {
@@ -68,58 +154,7 @@ func ModF_DispatcherActivity(ctx context.Context, daysNumber int, activities []A
 				wg.Add(1)
 				go func(act ActivityRequest, cfg ActivitySettings, offset int) {
 					defer wg.Done()
-
-					// Парсим временные границы выполнения
-					startTime, err1 := time.Parse("15:04", cfg.DispatcherPeriod[0])
-					endTime, err2 := time.Parse("15:04", cfg.DispatcherPeriod[1])
-					if err1 != nil || err2 != nil {
-						return
-					}
-					startMin := startTime.Hour()*60 + startTime.Minute()
-					endMin := endTime.Hour()*60 + endTime.Minute()
-					minAct := cfg.DispatcherActivityMax[0]
-					maxAct := cfg.DispatcherActivityMax[1]
-					if endMin <= startMin || maxAct < minAct {
-						return
-					}
-
-					count := rand.Intn(maxAct-minAct+1) + minAct
-
-					currentDay := start.AddDate(0, 0, offset)
-					// Начало окна активности в московском часовом поясе
-					windowStart := time.Date(currentDay.Year(), currentDay.Month(), currentDay.Day(), startTime.Hour(), startTime.Minute(), 0, 0, loc)
-					duration := time.Duration(endMin-startMin) * time.Minute
-					interval := duration / time.Duration(count)
-
-					for i := 0; i < count; i++ {
-						select {
-						case <-ctx.Done():
-							return
-						default:
-						}
-
-						t := windowStart.Add(interval * time.Duration(i))
-						now := time.Now().In(loc)
-						// Пропускаем выполнение, если расчётное время уже прошло
-						if t.Before(now) {
-							continue
-						}
-						if sleep := t.Sub(now); sleep > 0 {
-							select {
-							case <-time.After(sleep):
-							case <-ctx.Done():
-								return
-							}
-						}
-						payload, _ := json.Marshal(act.RequestBody)
-						req, err := http.NewRequestWithContext(ctx, "POST", act.URL, bytes.NewBuffer(payload))
-						if err != nil {
-							continue
-						}
-						req.Header.Set("Content-Type", "application/json")
-						req.Header.Set("Authorization", "Bearer "+bearerToken)
-						http.DefaultClient.Do(req)
-					}
+					runActivityInPeriod(ctx, start, loc, act, cfg, offset)
 				}(act, cfg, day)
 			case strings.Contains(act.URL, "reaction"):
 				cfg := reactionCfg
@@ -130,58 +165,7 @@ func ModF_DispatcherActivity(ctx context.Context, daysNumber int, activities []A
 				wg.Add(1)
 				go func(act ActivityRequest, cfg ActivitySettings, offset int) {
 					defer wg.Done()
-
-					// Парсим временные границы выполнения
-					startTime, err1 := time.Parse("15:04", cfg.DispatcherPeriod[0])
-					endTime, err2 := time.Parse("15:04", cfg.DispatcherPeriod[1])
-					if err1 != nil || err2 != nil {
-						return
-					}
-					startMin := startTime.Hour()*60 + startTime.Minute()
-					endMin := endTime.Hour()*60 + endTime.Minute()
-					minAct := cfg.DispatcherActivityMax[0]
-					maxAct := cfg.DispatcherActivityMax[1]
-					if endMin <= startMin || maxAct < minAct {
-						return
-					}
-
-					count := rand.Intn(maxAct-minAct+1) + minAct
-
-					currentDay := start.AddDate(0, 0, offset)
-					// Начало окна активности в московском часовом поясе
-					windowStart := time.Date(currentDay.Year(), currentDay.Month(), currentDay.Day(), startTime.Hour(), startTime.Minute(), 0, 0, loc)
-					duration := time.Duration(endMin-startMin) * time.Minute
-					interval := duration / time.Duration(count)
-
-					for i := 0; i < count; i++ {
-						select {
-						case <-ctx.Done():
-							return
-						default:
-						}
-
-						t := windowStart.Add(interval * time.Duration(i))
-						now := time.Now().In(loc)
-						// Пропускаем выполнение, если расчётное время уже прошло
-						if t.Before(now) {
-							continue
-						}
-						if sleep := t.Sub(now); sleep > 0 {
-							select {
-							case <-time.After(sleep):
-							case <-ctx.Done():
-								return
-							}
-						}
-						payload, _ := json.Marshal(act.RequestBody)
-						req, err := http.NewRequestWithContext(ctx, "POST", act.URL, bytes.NewBuffer(payload))
-						if err != nil {
-							continue
-						}
-						req.Header.Set("Content-Type", "application/json")
-						req.Header.Set("Authorization", "Bearer "+bearerToken)
-						http.DefaultClient.Do(req)
-					}
+					runActivityInPeriod(ctx, start, loc, act, cfg, offset)
 				}(act, cfg, day)
 			case strings.Contains(act.URL, "unsubscribe"):
 				if unsubscribeCfg.DispatcherStart == "" {
