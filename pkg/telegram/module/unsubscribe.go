@@ -32,13 +32,45 @@ func ModF_UnsubscribeAll(db *storage.DB, delay [2]int, limit int) error {
 		}
 	}
 
+	// Получаем ссылки на донорские каналы, чтобы мониторинговые аккаунты не отписывались от них
+	donorLinks, err := db.GetChannelDonorURLs()
+	if err != nil {
+		return err
+	}
+	donorChannels := make(map[string]struct{})
+	for _, l := range donorLinks {
+		if name, ok := channelUsernameFromLink(l); ok {
+			donorChannels[strings.ToLower(name)] = struct{}{}
+		}
+	}
+
+	// Собираем все авторизованные аккаунты, включая мониторинговые
 	accounts, err := db.GetAuthorizedAccounts()
 	if err != nil {
 		return err
 	}
+	monitoringAccounts, err := db.GetMonitoringAccounts()
+	if err != nil {
+		return err
+	}
+	accounts = append(accounts, monitoringAccounts...)
+
 	for _, acc := range accounts {
 		log.Printf("[UNSUBSCRIBE] аккаунт %d: начало обработки", acc.ID)
-		if err := unsubscribeAccount(db, &acc, delay, limit, skipChannels); err != nil {
+
+		// Для мониторинговых аккаунтов объединяем списки каналов, отписка от которых запрещена
+		skip := skipChannels
+		if acc.AccountMonitoring {
+			skip = make(map[string]struct{}, len(skipChannels)+len(donorChannels))
+			for k := range skipChannels {
+				skip[k] = struct{}{}
+			}
+			for k := range donorChannels {
+				skip[k] = struct{}{}
+			}
+		}
+
+		if err := unsubscribeAccount(db, &acc, delay, limit, skip); err != nil {
 			log.Printf("[UNSUBSCRIBE] аккаунт %d: %v", acc.ID, err)
 		} else {
 			log.Printf("[UNSUBSCRIBE] аккаунт %d: завершено", acc.ID)
