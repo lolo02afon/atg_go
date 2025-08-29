@@ -16,4 +16,5 @@ type ChannelDuplicate struct {
 	ChannelDonorTGID *string `json:"channel_donor_tgid"` // ID телеграм-канала источника
 	PostTextRemove   *string `json:"post_text_remove"`   // Текст для удаления
 	PostTextAdd      *string `json:"post_text_add"`      // Текст для добавления
+	LastPostID       *int    `json:"last_post_id"`       // ID последнего пересланного поста
 }
