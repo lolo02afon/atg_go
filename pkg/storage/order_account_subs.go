@@ -10,8 +10,14 @@ func (db *DB) CountOrderSubs(orderID int) (int, error) {
 }
 
 // AddOrderAccountSub сохраняет факт подписки аккаунта на канал заказа.
+// Используем ON CONFLICT, чтобы игнорировать повторные записи без ошибки.
 func (db *DB) AddOrderAccountSub(orderID, accountID int) error {
-	_, err := db.Conn.Exec(`INSERT INTO order_account_subs (order_id, account_id) VALUES ($1, $2)`, orderID, accountID)
+	_, err := db.Conn.Exec(
+		`INSERT INTO order_account_subs (order_id, account_id)
+                VALUES ($1, $2)
+                ON CONFLICT DO NOTHING`,
+		orderID, accountID,
+	)
 	return err
 }
 
