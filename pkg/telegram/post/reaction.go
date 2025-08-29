@@ -16,9 +16,6 @@ import (
 	"github.com/gotd/td/tg"
 )
 
-// reactions содержит список базовых реакций, которые пытаемся использовать.
-var reactions = []string{"❤️", "👍"}
-
 // SendReaction добавляет реакцию к посту канала по ссылке postURL.
 // Функция не фиксирует активность аккаунта.
 func SendReaction(db *storage.DB, acc models.Account, postURL string) error {
@@ -65,17 +62,51 @@ func SendReaction(db *storage.DB, acc models.Account, postURL string) error {
 		// Пытаемся подписаться на канал; игнорируем ошибку, если уже участник
 		_ = module.Modf_JoinChannel(ctx, api, ch, db, acc.ID)
 
-		// Получаем разрешённые реакции для канала
-		allowed, err := module.GetAllowedReactions(ctx, api, ch, reactions)
+		// Получаем список реакций, разрешённых каналом (не более четырёх)
+		suggested, err := module.GetChannelReactions(ctx, api, ch, 4)
 		if err != nil {
 			return err
 		}
-		if len(allowed) == 0 {
+
+		// Запрашиваем сообщение, чтобы узнать уже поставленные реакции
+		history, err := api.MessagesGetHistory(ctx, &tg.MessagesGetHistoryRequest{
+			Peer:     &tg.InputPeerChannel{ChannelID: ch.ID, AccessHash: ch.AccessHash},
+			OffsetID: msgID + 1,
+			Limit:    1,
+		})
+		if err != nil {
+			return err
+		}
+		channelMessages, ok := history.(*tg.MessagesChannelMessages)
+		if !ok || len(channelMessages.Messages) == 0 {
+			return fmt.Errorf("сообщение не найдено")
+		}
+		msg, ok := channelMessages.Messages[0].(*tg.Message)
+		if !ok {
+			return fmt.Errorf("неподдерживаемый тип сообщения")
+		}
+
+		// Собираем реакции, уже присутствующие у поста
+		var existing []string
+		for _, rc := range msg.Reactions.Results {
+			if emoji, ok := rc.Reaction.(*tg.ReactionEmoji); ok {
+				existing = append(existing, emoji.Emoticon)
+			}
+		}
+
+		// Определяем набор кандидатов для реакции
+		candidates := suggested
+		if len(existing) >= 2 {
+			// Если у поста уже две и более реакций, используем одну из них
+			candidates = existing
+		}
+		if len(candidates) == 0 {
 			return fmt.Errorf("нет доступных реакций")
 		}
 
-		// Выбираем случайную реакцию из разрешённых и отправляем её
-		reaction := allowed[rand.Intn(len(allowed))]
+		rand.Seed(time.Now().UnixNano())
+		reaction := candidates[rand.Intn(len(candidates))]
+
 		_, err = api.MessagesSendReaction(ctx, &tg.MessagesSendReactionRequest{
 			Peer:        &tg.InputPeerChannel{ChannelID: ch.ID, AccessHash: ch.AccessHash},
 			MsgID:       msgID,
