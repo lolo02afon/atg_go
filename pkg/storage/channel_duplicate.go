@@ -60,6 +60,32 @@ func (db *DB) GetChannelDuplicates() ([]ChannelDuplicateOrder, error) {
 	return list, nil
 }
 
+// GetChannelDonorURLs возвращает список ссылок на каналы-доноры.
+// Эти каналы используются при дублировании контента,
+// поэтому отписка от них для мониторинговых аккаунтов запрещена.
+func (db *DB) GetChannelDonorURLs() ([]string, error) {
+	rows, err := db.Conn.Query(`SELECT url_channel_donor FROM channel_duplicate WHERE url_channel_donor <> ''`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var urls []string
+	for rows.Next() {
+		var url sql.NullString
+		if err := rows.Scan(&url); err != nil {
+			return nil, err
+		}
+		if url.Valid {
+			urls = append(urls, url.String)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return urls, nil
+}
+
 // SetChannelDonorTGID сохраняет ID донорского канала.
 func (db *DB) SetChannelDonorTGID(id int, tgid string) error {
 	_, err := db.Conn.Exec(`UPDATE channel_duplicate SET channel_donor_tgid = $1 WHERE id = $2`, tgid, id)
