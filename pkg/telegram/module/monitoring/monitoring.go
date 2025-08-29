@@ -18,12 +18,9 @@ import (
 )
 
 // orderInfo хранит сведения о заказе, необходимые для расчёта метрик.
-// subsActiveCount указывает, сколько аккаунтов подписались на канал заказа
-// и готовы просматривать посты.
 type orderInfo struct {
-	id              int
-	url             string
-	subsActiveCount *int
+	id  int
+	url string
 }
 
 // randomByPercent возвращает число, равное случайному проценту от base.
@@ -92,20 +89,20 @@ func run(db *storage.DB) error {
 			postTime := time.Unix(int64(msg.Date), 0)
 			link := strings.TrimSuffix(o.url, "/") + "/" + strconv.Itoa(msg.ID)
 
-			// Берём целевое число просмотров из количества активных подписчиков заказа
-			var view int
-			if o.subsActiveCount != nil {
-				view = *o.subsActiveCount
+			// Считаем фактическое число подписанных аккаунтов для заказа
+			view, err := db.CountOrderSubs(o.id)
+			if err != nil {
+				log.Printf("[MONITORING] подсчёт подписчиков заказа %d: %v", o.id, err)
 			}
 
-			// Реакции: от 0.5% до 2% от целевого числа просмотров
+			// Реакции: от 0.5% до 2% от фактического числа просмотров
 			reaction := randomByPercent(view, 0.5, 2)
-			// Репосты: от 2% до 10% от целевого числа просмотров
+			// Репосты: от 2% до 10% от фактического числа просмотров
 			repost := randomByPercent(view, 2, 10)
 
-			// Указатели устанавливаются только при наличии целевого значения просмотров
+			// Указатели устанавливаются только при наличии активной аудитории
 			var viewPtr, reactionPtr, repostPtr *int
-			if o.subsActiveCount != nil {
+			if view > 0 {
 				viewPtr = &view
 				reactionPtr = &reaction
 				repostPtr = &repost
@@ -195,7 +192,7 @@ func run(db *storage.DB) error {
 			if o.ChannelTGID == nil {
 				_ = db.SetOrderChannelTGID(o.ID, fmt.Sprintf("%d", ch.ID))
 			}
-			orderMap[ch.ID] = orderInfo{id: o.ID, url: o.URLDefault, subsActiveCount: o.SubsActiveCount}
+			orderMap[ch.ID] = orderInfo{id: o.ID, url: o.URLDefault}
 		}
 
 		// держим соединение активным, пока контекст не будет отменён
