@@ -23,50 +23,46 @@ type channelInfo struct {
 	add    *string     // Текст для добавления
 }
 
-// getMessageID извлекает идентификатор пересланного сообщения из ответа Telegram.
-func getMessageID(upd tg.UpdatesClass) (int, error) {
-	switch u := upd.(type) {
-	case *tg.Updates:
-		for _, up := range u.Updates {
-			if id, err := getMessageIDFromUpdate(up); err == nil {
-				return id, nil
-			}
-		}
-	case *tg.UpdatesCombined:
-		for _, up := range u.Updates {
-			if id, err := getMessageIDFromUpdate(up); err == nil {
-				return id, nil
-			}
-		}
-	case *tg.UpdateShort:
-		return getMessageIDFromUpdate(u.Update)
-	case *tg.UpdateShortMessage:
-		return u.ID, nil
-	case *tg.UpdateShortChatMessage:
-		return u.ID, nil
-	case *tg.UpdateShortSentMessage:
-		return u.ID, nil
+// findScheduledForwardID ищет среди отложенных сообщений сообщение,
+// пересланное из нужного канала, и возвращает его ID в целевом канале.
+func findScheduledForwardID(ctx context.Context, api *tg.Client, target, donor *tg.Channel, donorMsgID int) (int, error) {
+	// Запрашиваем список отложенных сообщений в целевом канале.
+	msgs, err := api.MessagesGetScheduledHistory(ctx, &tg.MessagesGetScheduledHistoryRequest{
+		Peer: &tg.InputPeerChannel{ChannelID: target.ID, AccessHash: target.AccessHash},
+	})
+	if err != nil {
+		return 0, fmt.Errorf("получение истории отложенных сообщений: %w", err)
 	}
-	return 0, fmt.Errorf("не удалось получить ID пересланного сообщения")
-}
 
-// getMessageIDFromUpdate разбирает отдельное обновление и ищет ID сообщения.
-func getMessageIDFromUpdate(up tg.UpdateClass) (int, error) {
-	switch v := up.(type) {
-	case *tg.UpdateNewMessage:
-		if m, ok := v.Message.(*tg.Message); ok {
-			return m.ID, nil
+	// Извлекаем массив сообщений из ответа.
+	var list []tg.MessageClass
+	switch m := msgs.(type) {
+	case *tg.MessagesMessages:
+		list = m.Messages
+	case *tg.MessagesChannelMessages:
+		list = m.Messages
+	default:
+		return 0, fmt.Errorf("неподдерживаемый тип ответа %T", msgs)
+	}
+
+	// Ищем сообщение, пересланное из требуемого канала и с нужным ID.
+	for _, msg := range list {
+		m, ok := msg.(*tg.Message)
+		if !ok {
+			continue
 		}
-	case *tg.UpdateNewChannelMessage:
-		if m, ok := v.Message.(*tg.Message); ok {
-			return m.ID, nil
+		fwd, ok := m.GetFwdFrom()
+		if !ok {
+			continue
 		}
-	case *tg.UpdateNewScheduledMessage:
-		if m, ok := v.Message.(*tg.Message); ok {
-			return m.ID, nil
+		if peer, ok := fwd.FromID.(*tg.PeerChannel); ok {
+			if peer.ChannelID == donor.ID && fwd.ChannelPost == donorMsgID {
+				return m.ID, nil
+			}
 		}
 	}
-	return 0, fmt.Errorf("ID не найден")
+
+	return 0, fmt.Errorf("пересланное сообщение не найдено")
 }
 
 // Connect присоединяет модуль дублирования каналов к существующему клиенту Telegram.
@@ -158,17 +154,17 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 				DropAuthor: true,
 			}
 			req.SetScheduleDate(schedule)
-			res, err := api.MessagesForwardMessages(ctx, req)
-			if err != nil {
+			if _, err := api.MessagesForwardMessages(ctx, req); err != nil {
 				saveErr := db.SaveSos(fmt.Sprintf("не удалось переслать пост %d с канала %d: %v", msg.ID, info.donor.ID, err))
 				if saveErr != nil {
 					log.Printf("[CHANNEL DUPLICATE] ошибка записи в Sos: %v", saveErr)
 				}
 				return nil
 			}
-			forwardedID, err := getMessageID(res)
+			// Получаем ID пересланного сообщения через историю отложенных сообщений
+			forwardedID, err := findScheduledForwardID(ctx, api, info.target, info.donor, msg.ID)
 			if err != nil {
-				log.Printf("[CHANNEL DUPLICATE] получение ID сообщения: %v", err)
+				log.Printf("[CHANNEL DUPLICATE] поиск ID сообщения: %v", err)
 				return nil
 			}
 			editReq := tg.MessagesEditMessageRequest{
