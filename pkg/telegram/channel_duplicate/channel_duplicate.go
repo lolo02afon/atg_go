@@ -23,59 +23,39 @@ type channelInfo struct {
 	add    *string     // Текст для добавления
 }
 
-// getForwardedID извлекает ID пересланного сообщения из обновлений Telegram,
-// учитывая только сообщения, пришедшие в указанный канал.
-func getForwardedID(upd tg.UpdatesClass, targetID int64) (int, error) {
-	switch u := upd.(type) {
-	case *tg.Updates:
-		for _, up := range u.Updates {
-			if id, err := getForwardedIDFromUpdate(up, targetID); err == nil {
-				return id, nil
-			}
+// getScheduledID получает ID только что отложенного сообщения.
+// Telegram не сразу возвращает корректный ID пересланного поста,
+// поэтому мы запрашиваем историю отложенных сообщений несколько раз,
+// пока не найдём нужный пост или не исчерпаем попытки.
+func getScheduledID(ctx context.Context, api *tg.Client, donorID int64, donorMsgID int, target *tg.Channel) (int, error) {
+	for i := 0; i < 5; i++ {
+		// Запрашиваем историю отложенных сообщений
+		msgs, err := api.MessagesGetScheduledHistory(ctx, &tg.MessagesGetScheduledHistoryRequest{
+			Peer: &tg.InputPeerChannel{ChannelID: target.ID, AccessHash: target.AccessHash},
+		})
+		if err != nil {
+			return 0, err
 		}
-	case *tg.UpdatesCombined:
-		for _, up := range u.Updates {
-			if id, err := getForwardedIDFromUpdate(up, targetID); err == nil {
-				return id, nil
-			}
-		}
-	case *tg.UpdateShort:
-		return getForwardedIDFromUpdate(u.Update, targetID)
-	case *tg.UpdateShortSentMessage:
-		// Сообщение, отправленное в канал, приходит в виде UpdateShortSentMessage
-		// без вложенного объекта сообщения, поэтому просто возвращаем его ID.
-		return u.ID, nil
-	}
-	// Если не удалось найти пересланное сообщение, возвращаем ошибку
-	return 0, fmt.Errorf("пересланное сообщение не найдено")
 
-}
+		modified, ok := msgs.AsModified()
+		if !ok {
+			return 0, fmt.Errorf("неожиданный тип ответа %T", msgs)
+		}
 
-// getForwardedIDFromUpdate извлекает ID сообщения из отдельного обновления,
-// если оно относится к нужному каналу.
-func getForwardedIDFromUpdate(up tg.UpdateClass, targetID int64) (int, error) {
-	switch v := up.(type) {
-	case *tg.UpdateNewMessage:
-		if m, ok := v.Message.(*tg.Message); ok {
-			if peer, ok := m.PeerID.(*tg.PeerChannel); ok && peer.ChannelID == targetID {
-				return m.ID, nil
+		for _, m := range modified.GetMessages() {
+			msg, ok := m.(*tg.Message)
+			if !ok || msg.FwdFrom.Zero() {
+				continue
+			}
+			if ch, ok := msg.FwdFrom.FromID.(*tg.PeerChannel); ok && ch.ChannelID == donorID && msg.FwdFrom.ChannelPost == donorMsgID {
+				return msg.ID, nil
 			}
 		}
-	case *tg.UpdateNewChannelMessage:
-		if m, ok := v.Message.(*tg.Message); ok {
-			if peer, ok := m.PeerID.(*tg.PeerChannel); ok && peer.ChannelID == targetID {
-				return m.ID, nil
-			}
-		}
-	case *tg.UpdateNewScheduledMessage:
-		if m, ok := v.Message.(*tg.Message); ok {
-			if peer, ok := m.PeerID.(*tg.PeerChannel); ok && peer.ChannelID == targetID {
-				return m.ID, nil
-			}
-		}
+		// Делаем паузу перед следующей попыткой
+		time.Sleep(300 * time.Millisecond)
 	}
 
-	return 0, fmt.Errorf("пересланное сообщение не найдено")
+	return 0, fmt.Errorf("отложенное сообщение не найдено")
 }
 
 // Connect присоединяет модуль дублирования каналов к существующему клиенту Telegram.
@@ -167,16 +147,15 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 				DropAuthor: true,
 			}
 			req.SetScheduleDate(schedule)
-			res, err := api.MessagesForwardMessages(ctx, req)
-			if err != nil {
+			if _, err := api.MessagesForwardMessages(ctx, req); err != nil {
 				saveErr := db.SaveSos(fmt.Sprintf("не удалось переслать пост %d с канала %d: %v", msg.ID, info.donor.ID, err))
 				if saveErr != nil {
 					log.Printf("[CHANNEL DUPLICATE] ошибка записи в Sos: %v", saveErr)
 				}
 				return nil
 			}
-			// Извлекаем ID пересланного сообщения из ответа Telegram
-			forwardedID, err := getForwardedID(res, info.target.ID)
+			// Ищем фактический ID отложенного сообщения
+			forwardedID, err := getScheduledID(ctx, api, info.donor.ID, msg.ID, info.target)
 			if err != nil {
 				log.Printf("[CHANNEL DUPLICATE] поиск ID сообщения: %v", err)
 				return nil
