@@ -109,66 +109,94 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 		if isAdvertisement(msg) {
 			return nil
 		}
-		// Планируем отправку поста через четыре месяца без указания источника
-		schedule := int(time.Now().AddDate(0, 4, 0).Unix())
-		req := &tg.MessagesForwardMessagesRequest{
+		// Формируем текст для публикации
+		text := msg.Message
+		needsEdit := false
+		if info.remove != nil && *info.remove != "" {
+			if strings.Contains(text, *info.remove) {
+				// Удаляем указанный фрагмент
+				text = strings.ReplaceAll(text, *info.remove, "")
+				needsEdit = true
+			} else {
+				// Если требуемый фрагмент не найден, оставляем пост в отложенных
+				schedule := int(time.Now().AddDate(0, 4, 0).Unix())
+				req := &tg.MessagesForwardMessagesRequest{
+					FromPeer:   &tg.InputPeerChannel{ChannelID: info.donor.ID, AccessHash: info.donor.AccessHash},
+					ID:         []int{msg.ID},
+					ToPeer:     &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
+					RandomID:   []int64{rand.Int63()},
+					DropAuthor: true,
+				}
+				req.SetScheduleDate(schedule)
+				if _, err := api.MessagesForwardMessages(ctx, req); err != nil {
+					saveErr := db.SaveSos(fmt.Sprintf("не удалось переслать пост %d с канала %d: %v", msg.ID, info.donor.ID, err))
+					if saveErr != nil {
+						log.Printf("[CHANNEL DUPLICATE] ошибка записи в Sos: %v", saveErr)
+					}
+				}
+				return nil
+			}
+		}
+		if info.add != nil && *info.add != "" {
+			// Добавляем текст в конец поста
+			text += *info.add
+			needsEdit = true
+		}
+
+		// Если требуются изменения, работаем через отложенный пост
+		if needsEdit {
+			schedule := int(time.Now().AddDate(0, 4, 0).Unix())
+			req := &tg.MessagesForwardMessagesRequest{
+				FromPeer:   &tg.InputPeerChannel{ChannelID: info.donor.ID, AccessHash: info.donor.AccessHash},
+				ID:         []int{msg.ID},
+				ToPeer:     &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
+				RandomID:   []int64{rand.Int63()},
+				DropAuthor: true,
+			}
+			req.SetScheduleDate(schedule)
+			res, err := api.MessagesForwardMessages(ctx, req)
+			if err != nil {
+				saveErr := db.SaveSos(fmt.Sprintf("не удалось переслать пост %d с канала %d: %v", msg.ID, info.donor.ID, err))
+				if saveErr != nil {
+					log.Printf("[CHANNEL DUPLICATE] ошибка записи в Sos: %v", saveErr)
+				}
+				return nil
+			}
+			forwardedID, err := getMessageID(res)
+			if err != nil {
+				log.Printf("[CHANNEL DUPLICATE] получение ID сообщения: %v", err)
+				return nil
+			}
+			editReq := tg.MessagesEditMessageRequest{
+				Peer: &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
+				ID:   forwardedID,
+			}
+			editReq.SetMessage(text)
+			if _, err = api.MessagesEditMessage(ctx, &editReq); err != nil {
+				log.Printf("[CHANNEL DUPLICATE] редактирование сообщения: %v", err)
+				return nil
+			}
+			if _, err = api.MessagesSendScheduledMessages(ctx, &tg.MessagesSendScheduledMessagesRequest{
+				Peer: &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
+				ID:   []int{forwardedID},
+			}); err != nil {
+				log.Printf("[CHANNEL DUPLICATE] публикация отложенного сообщения: %v", err)
+			}
+			return nil
+		}
+
+		// Изменения не требуются — пересылаем пост сразу
+		if _, err := api.MessagesForwardMessages(ctx, &tg.MessagesForwardMessagesRequest{
 			FromPeer:   &tg.InputPeerChannel{ChannelID: info.donor.ID, AccessHash: info.donor.AccessHash},
 			ID:         []int{msg.ID},
 			ToPeer:     &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
 			RandomID:   []int64{rand.Int63()},
 			DropAuthor: true,
-		}
-		req.SetScheduleDate(schedule)
-
-		res, err := api.MessagesForwardMessages(ctx, req)
-		if err != nil {
+		}); err != nil {
 			saveErr := db.SaveSos(fmt.Sprintf("не удалось переслать пост %d с канала %d: %v", msg.ID, info.donor.ID, err))
 			if saveErr != nil {
 				log.Printf("[CHANNEL DUPLICATE] ошибка записи в Sos: %v", saveErr)
 			}
-			return nil
-		}
-
-		// Извлекаем ID отложенного сообщения
-		forwardedID, err := getMessageID(res)
-		if err != nil {
-			log.Printf("[CHANNEL DUPLICATE] получение ID сообщения: %v", err)
-			return nil
-		}
-
-		// Подготавливаем текст: удаляем указанную фразу и добавляем суффикс
-		text := msg.Message
-		if info.remove != nil && *info.remove != "" {
-			if strings.Contains(text, *info.remove) {
-				text = strings.ReplaceAll(text, *info.remove, "")
-			} else {
-				// Если ничего не удалено, оставляем пост в отложенных сообщениях
-				return nil
-			}
-		}
-		if info.add != nil {
-			text += *info.add
-		}
-
-		// Редактируем отложенный пост
-		editReq := tg.MessagesEditMessageRequest{
-			Peer: &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
-			ID:   forwardedID,
-		}
-		editReq.SetMessage(text)
-		_, err = api.MessagesEditMessage(ctx, &editReq)
-		if err != nil {
-			log.Printf("[CHANNEL DUPLICATE] редактирование сообщения: %v", err)
-			return nil
-		}
-
-		// Публикуем сообщение немедленно
-		_, err = api.MessagesSendScheduledMessages(ctx, &tg.MessagesSendScheduledMessagesRequest{
-			Peer: &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
-			ID:   []int{forwardedID},
-		})
-		if err != nil {
-			log.Printf("[CHANNEL DUPLICATE] публикация отложенного сообщения: %v", err)
 		}
 		return nil
 	})
