@@ -92,16 +92,26 @@ func (db *DB) SetChannelDonorTGID(id int, tgid string) error {
 	return err
 }
 
-// TrySetLastPostID обновляет last_post_id, если сообщение новое.
-// Возвращает true, если обновление выполнено.
-func (db *DB) TrySetLastPostID(id int, postID int) (bool, error) {
-	res, err := db.Conn.Exec(`UPDATE channel_duplicate SET last_post_id = $2 WHERE id = $1 AND (last_post_id IS NULL OR last_post_id < $2)`, id, postID)
-	if err != nil {
-		return false, err
+// TrySetLastPostID обновляет last_post_id и возвращает актуальные тексты для обработки.
+// Если запись не изменилась, updated будет false, а строки равны nil.
+func (db *DB) TrySetLastPostID(id int, postID int) (updated bool, remove *string, add *string, err error) {
+	row := db.Conn.QueryRow(`UPDATE channel_duplicate SET last_post_id = $2 WHERE id = $1 AND (last_post_id IS NULL OR last_post_id < $2) RETURNING post_text_remove, post_text_add`, id, postID)
+	var (
+		postRemove sql.NullString
+		postAdd    sql.NullString
+	)
+	if err = row.Scan(&postRemove, &postAdd); err != nil {
+		if err == sql.ErrNoRows {
+			// Обновление не требуется
+			return false, nil, nil, nil
+		}
+		return false, nil, nil, err
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return false, err
+	if postRemove.Valid {
+		remove = &postRemove.String
 	}
-	return n > 0, nil
+	if postAdd.Valid {
+		add = &postAdd.String
+	}
+	return true, remove, add, nil
 }

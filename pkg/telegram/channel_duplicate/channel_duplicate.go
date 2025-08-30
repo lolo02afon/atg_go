@@ -97,7 +97,7 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 		if !ok {
 			return nil
 		}
-		updated, err := db.TrySetLastPostID(info.id, msg.ID)
+		updated, remove, add, err := db.TrySetLastPostID(info.id, msg.ID)
 		if err != nil {
 			log.Printf("[CHANNEL DUPLICATE] обновление last_post_id: %v", err)
 			return nil
@@ -105,6 +105,10 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 		if !updated {
 			return nil
 		}
+		// Обновляем тексты в карте, чтобы использовать свежие значения
+		info.remove = remove
+		info.add = add
+		chMap[peer.ChannelID] = info
 		// Перед пересылкой проверяем пост на признаки рекламы
 		if isAdvertisement(msg) {
 			return nil
