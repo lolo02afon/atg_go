@@ -46,8 +46,6 @@ func getForwardedID(upd tg.UpdatesClass, targetID int64) (int, error) {
 		// без вложенного объекта сообщения, поэтому просто возвращаем его ID.
 		return u.ID, nil
 	}
-	return 0, fmt.Errorf("не удалось получить ID пересланного сообщения")
-}
 
 // getForwardedIDFromUpdate извлекает ID сообщения из отдельного обновления,
 // если оно относится к нужному каналу.
@@ -72,7 +70,8 @@ func getForwardedIDFromUpdate(up tg.UpdateClass, targetID int64) (int, error) {
 			}
 		}
 	}
-	return 0, fmt.Errorf("ID не найден")
+
+	return 0, fmt.Errorf("пересланное сообщение не найдено")
 }
 
 // Connect присоединяет модуль дублирования каналов к существующему клиенту Telegram.
@@ -164,8 +163,7 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 				DropAuthor: true,
 			}
 			req.SetScheduleDate(schedule)
-			res, err := api.MessagesForwardMessages(ctx, req)
-			if err != nil {
+			if _, err := api.MessagesForwardMessages(ctx, req); err != nil {
 				saveErr := db.SaveSos(fmt.Sprintf("не удалось переслать пост %d с канала %d: %v", msg.ID, info.donor.ID, err))
 				if saveErr != nil {
 					log.Printf("[CHANNEL DUPLICATE] ошибка записи в Sos: %v", saveErr)
@@ -175,7 +173,7 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 			// Извлекаем ID пересланного сообщения из ответа Telegram
 			forwardedID, err := getForwardedID(res, info.target.ID)
 			if err != nil {
-				log.Printf("[CHANNEL DUPLICATE] получение ID сообщения: %v", err)
+				log.Printf("[CHANNEL DUPLICATE] поиск ID сообщения: %v", err)
 				return nil
 			}
 			editReq := tg.MessagesEditMessageRequest{
