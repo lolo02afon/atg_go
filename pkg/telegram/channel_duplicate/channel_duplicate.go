@@ -23,39 +23,46 @@ type channelInfo struct {
 	add    *string     // Текст для добавления
 }
 
-// getScheduledID получает ID только что отложенного сообщения.
-// Telegram не сразу возвращает корректный ID пересланного поста,
-// поэтому мы запрашиваем историю отложенных сообщений несколько раз,
-// пока не найдём нужный пост или не исчерпаем попытки.
-func getScheduledID(ctx context.Context, api *tg.Client, donorID int64, donorMsgID int, target *tg.Channel) (int, error) {
-	for i := 0; i < 5; i++ {
-		// Запрашиваем историю отложенных сообщений
-		msgs, err := api.MessagesGetScheduledHistory(ctx, &tg.MessagesGetScheduledHistoryRequest{
-			Peer: &tg.InputPeerChannel{ChannelID: target.ID, AccessHash: target.AccessHash},
-		})
-		if err != nil {
-			return 0, err
-		}
+// forwardScheduled пересылает сообщение в отложенные и возвращает его ID.
+// Идентификатор извлекается из ответа Telegram по random_id.
+func forwardScheduled(ctx context.Context, api *tg.Client, donor *tg.Channel, target *tg.Channel, msgID int, schedule int) (int, error) {
+	randomID := rand.Int63()
+	req := &tg.MessagesForwardMessagesRequest{
+		FromPeer:   &tg.InputPeerChannel{ChannelID: donor.ID, AccessHash: donor.AccessHash},
+		ID:         []int{msgID},
+		ToPeer:     &tg.InputPeerChannel{ChannelID: target.ID, AccessHash: target.AccessHash},
+		RandomID:   []int64{randomID},
+		DropAuthor: true,
+	}
+	req.SetScheduleDate(schedule)
 
-		modified, ok := msgs.AsModified()
-		if !ok {
-			return 0, fmt.Errorf("неожиданный тип ответа %T", msgs)
-		}
-
-		for _, m := range modified.GetMessages() {
-			msg, ok := m.(*tg.Message)
-			if !ok || msg.FwdFrom.Zero() {
-				continue
-			}
-			if ch, ok := msg.FwdFrom.FromID.(*tg.PeerChannel); ok && ch.ChannelID == donorID && msg.FwdFrom.ChannelPost == donorMsgID {
-				return msg.ID, nil
-			}
-		}
-		// Делаем паузу перед следующей попыткой
-		time.Sleep(300 * time.Millisecond)
+	upd, err := api.MessagesForwardMessages(ctx, req)
+	if err != nil {
+		return 0, err
 	}
 
-	return 0, fmt.Errorf("отложенное сообщение не найдено")
+	var updates []tg.UpdateClass
+	switch u := upd.(type) {
+	case *tg.Updates:
+		updates = u.Updates
+	case *tg.UpdatesCombined:
+		updates = u.Updates
+	default:
+		return 0, fmt.Errorf("неожиданный тип ответа %T", upd)
+	}
+	for _, u := range updates {
+		switch up := u.(type) {
+		case *tg.UpdateMessageID:
+			if up.RandomID == randomID {
+				return up.ID, nil
+			}
+		case *tg.UpdateNewScheduledMessage:
+			if m, ok := up.Message.(*tg.Message); ok {
+				return m.ID, nil
+			}
+		}
+	}
+	return 0, fmt.Errorf("ID отложенного сообщения не найден")
 }
 
 // Connect присоединяет модуль дублирования каналов к существующему клиенту Telegram.
@@ -139,26 +146,12 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 		// Если требуются изменения, работаем через отложенный пост
 		if needsEdit {
 			schedule := int(time.Now().AddDate(0, 4, 0).Unix())
-			req := &tg.MessagesForwardMessagesRequest{
-				FromPeer:   &tg.InputPeerChannel{ChannelID: info.donor.ID, AccessHash: info.donor.AccessHash},
-				ID:         []int{msg.ID},
-				ToPeer:     &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
-				RandomID:   []int64{rand.Int63()},
-				DropAuthor: true,
-			}
-			req.SetScheduleDate(schedule)
-			if _, err := api.MessagesForwardMessages(ctx, req); err != nil {
+			forwardedID, err := forwardScheduled(ctx, api, info.donor, info.target, msg.ID, schedule)
+			if err != nil {
 				saveErr := db.SaveSos(fmt.Sprintf("не удалось переслать пост %d с канала %d: %v", msg.ID, info.donor.ID, err))
 				if saveErr != nil {
 					log.Printf("[CHANNEL DUPLICATE] ошибка записи в Sos: %v", saveErr)
 				}
-				return nil
-			}
-			// Сохраняем время публикации для дальнейшего редактирования
-			// Ищем фактический ID отложенного сообщения
-			forwardedID, err := getScheduledID(ctx, api, info.donor.ID, msg.ID, info.target)
-			if err != nil {
-				log.Printf("[CHANNEL DUPLICATE] поиск ID сообщения: %v", err)
 				return nil
 			}
 			editReq := tg.MessagesEditMessageRequest{
