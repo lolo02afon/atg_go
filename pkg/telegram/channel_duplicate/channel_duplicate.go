@@ -57,6 +57,10 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 		if !updated {
 			return nil
 		}
+		// Перед пересылкой проверяем пост на признаки рекламы
+		if isAdvertisement(msg) {
+			return nil
+		}
 		for i := 0; i < 3; i++ {
 			_, err = api.MessagesForwardMessages(ctx, &tg.MessagesForwardMessagesRequest{
 				FromPeer: &tg.InputPeerChannel{ChannelID: info.donor.ID, AccessHash: info.donor.AccessHash},
