@@ -46,6 +46,10 @@ func getForwardedID(upd tg.UpdatesClass, targetID int64) (int, error) {
 		// без вложенного объекта сообщения, поэтому просто возвращаем его ID.
 		return u.ID, nil
 	}
+	// Если не удалось найти пересланное сообщение, возвращаем ошибку
+	return 0, fmt.Errorf("пересланное сообщение не найдено")
+
+}
 
 // getForwardedIDFromUpdate извлекает ID сообщения из отдельного обновления,
 // если оно относится к нужному каналу.
@@ -163,7 +167,8 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 				DropAuthor: true,
 			}
 			req.SetScheduleDate(schedule)
-			if _, err := api.MessagesForwardMessages(ctx, req); err != nil {
+			res, err := api.MessagesForwardMessages(ctx, req)
+			if err != nil {
 				saveErr := db.SaveSos(fmt.Sprintf("не удалось переслать пост %d с канала %d: %v", msg.ID, info.donor.ID, err))
 				if saveErr != nil {
 					log.Printf("[CHANNEL DUPLICATE] ошибка записи в Sos: %v", saveErr)
