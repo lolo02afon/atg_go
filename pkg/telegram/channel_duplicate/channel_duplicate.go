@@ -154,6 +154,7 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 				}
 				return nil
 			}
+			// Сохраняем время публикации для дальнейшего редактирования
 			// Ищем фактический ID отложенного сообщения
 			forwardedID, err := getScheduledID(ctx, api, info.donor.ID, msg.ID, info.target)
 			if err != nil {
@@ -165,6 +166,7 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 				ID:   forwardedID,
 			}
 			editReq.SetMessage(text)
+			editReq.SetScheduleDate(schedule)
 			if _, err = api.MessagesEditMessage(ctx, &editReq); err != nil {
 				log.Printf("[CHANNEL DUPLICATE] редактирование сообщения: %v", err)
 				return nil
