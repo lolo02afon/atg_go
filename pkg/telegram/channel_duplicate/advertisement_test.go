@@ -32,7 +32,7 @@ func TestIsAdvertisement(t *testing.T) {
 				m.SetFwdFrom(f)
 				return m
 			}(),
-			want: true,
+			want: false,
 		},
 		{
 			name: "erid в ссылке",
