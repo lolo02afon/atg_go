@@ -16,9 +16,57 @@ import (
 
 // channelInfo хранит данные для пересылки сообщений.
 type channelInfo struct {
-	id     int
-	donor  *tg.Channel
-	target *tg.Channel
+	id     int         // ID записи channel_duplicate
+	donor  *tg.Channel // Канал-источник
+	target *tg.Channel // Наш канал
+	remove *string     // Текст для удаления из поста
+	add    *string     // Текст для добавления
+}
+
+// getMessageID извлекает идентификатор пересланного сообщения из ответа Telegram.
+func getMessageID(upd tg.UpdatesClass) (int, error) {
+	switch u := upd.(type) {
+	case *tg.Updates:
+		for _, up := range u.Updates {
+			if id, err := getMessageIDFromUpdate(up); err == nil {
+				return id, nil
+			}
+		}
+	case *tg.UpdatesCombined:
+		for _, up := range u.Updates {
+			if id, err := getMessageIDFromUpdate(up); err == nil {
+				return id, nil
+			}
+		}
+	case *tg.UpdateShort:
+		return getMessageIDFromUpdate(u.Update)
+	case *tg.UpdateShortMessage:
+		return u.ID, nil
+	case *tg.UpdateShortChatMessage:
+		return u.ID, nil
+	case *tg.UpdateShortSentMessage:
+		return u.ID, nil
+	}
+	return 0, fmt.Errorf("не удалось получить ID пересланного сообщения")
+}
+
+// getMessageIDFromUpdate разбирает отдельное обновление и ищет ID сообщения.
+func getMessageIDFromUpdate(up tg.UpdateClass) (int, error) {
+	switch v := up.(type) {
+	case *tg.UpdateNewMessage:
+		if m, ok := v.Message.(*tg.Message); ok {
+			return m.ID, nil
+		}
+	case *tg.UpdateNewChannelMessage:
+		if m, ok := v.Message.(*tg.Message); ok {
+			return m.ID, nil
+		}
+	case *tg.UpdateNewScheduledMessage:
+		if m, ok := v.Message.(*tg.Message); ok {
+			return m.ID, nil
+		}
+	}
+	return 0, fmt.Errorf("ID не найден")
 }
 
 // Connect присоединяет модуль дублирования каналов к существующему клиенту Telegram.
@@ -61,23 +109,66 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 		if isAdvertisement(msg) {
 			return nil
 		}
-		for i := 0; i < 3; i++ {
-			_, err = api.MessagesForwardMessages(ctx, &tg.MessagesForwardMessagesRequest{
-				FromPeer: &tg.InputPeerChannel{ChannelID: info.donor.ID, AccessHash: info.donor.AccessHash},
-				ID:       []int{msg.ID},
-				ToPeer:   &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
-				RandomID: []int64{rand.Int63()},
-			})
-			if err == nil {
+		// Планируем отправку поста через четыре месяца без указания источника
+		schedule := int(time.Now().AddDate(0, 4, 0).Unix())
+		req := &tg.MessagesForwardMessagesRequest{
+			FromPeer:   &tg.InputPeerChannel{ChannelID: info.donor.ID, AccessHash: info.donor.AccessHash},
+			ID:         []int{msg.ID},
+			ToPeer:     &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
+			RandomID:   []int64{rand.Int63()},
+			DropAuthor: true,
+		}
+		req.SetScheduleDate(schedule)
+
+		res, err := api.MessagesForwardMessages(ctx, req)
+		if err != nil {
+			saveErr := db.SaveSos(fmt.Sprintf("не удалось переслать пост %d с канала %d: %v", msg.ID, info.donor.ID, err))
+			if saveErr != nil {
+				log.Printf("[CHANNEL DUPLICATE] ошибка записи в Sos: %v", saveErr)
+			}
+			return nil
+		}
+
+		// Извлекаем ID отложенного сообщения
+		forwardedID, err := getMessageID(res)
+		if err != nil {
+			log.Printf("[CHANNEL DUPLICATE] получение ID сообщения: %v", err)
+			return nil
+		}
+
+		// Подготавливаем текст: удаляем указанную фразу и добавляем суффикс
+		text := msg.Message
+		if info.remove != nil && *info.remove != "" {
+			if strings.Contains(text, *info.remove) {
+				text = strings.ReplaceAll(text, *info.remove, "")
+			} else {
+				// Если ничего не удалено, оставляем пост в отложенных сообщениях
 				return nil
 			}
-			if i == 2 {
-				saveErr := db.SaveSos(fmt.Sprintf("не удалось переслать пост %d с канала %d: %v", msg.ID, info.donor.ID, err))
-				if saveErr != nil {
-					log.Printf("[CHANNEL DUPLICATE] ошибка записи в Sos: %v", saveErr)
-				}
-			}
-			time.Sleep(2 * time.Second)
+		}
+		if info.add != nil {
+			text += *info.add
+		}
+
+		// Редактируем отложенный пост
+		editReq := tg.MessagesEditMessageRequest{
+			Peer: &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
+			ID:   forwardedID,
+		}
+		editReq.SetMessage(text)
+		_, err = api.MessagesEditMessage(ctx, &editReq)
+		if err != nil {
+			log.Printf("[CHANNEL DUPLICATE] редактирование сообщения: %v", err)
+			return nil
+		}
+
+		// Публикуем сообщение немедленно
+		_, err = api.MessagesSendScheduledMessages(ctx, &tg.MessagesSendScheduledMessagesRequest{
+			Peer: &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
+			ID:   []int{forwardedID},
+		})
+		if err != nil {
+			log.Printf("[CHANNEL DUPLICATE] публикация отложенного сообщения: %v", err)
 		}
 		return nil
 	})
@@ -136,6 +227,6 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 		if cd.OrderChannelTGID == nil {
 			_ = db.SetOrderChannelTGID(cd.OrderID, fmt.Sprintf("%d", targetCh.ID))
 		}
-		chMap[donorCh.ID] = channelInfo{id: cd.ID, donor: donorCh, target: targetCh}
+		chMap[donorCh.ID] = channelInfo{id: cd.ID, donor: donorCh, target: targetCh, remove: cd.PostTextRemove, add: cd.PostTextAdd}
 	}
 }
