@@ -23,47 +23,49 @@ type channelInfo struct {
 	add    *string     // Текст для добавления
 }
 
-// getMessageID извлекает идентификатор пересланного сообщения из ответа Telegram.
-func getMessageID(upd tg.UpdatesClass) (int, error) {
+// getMessageID извлекает ID пересланного сообщения для указанного канала.
+// Telegram может вернуть несколько обновлений по разным каналам,
+// поэтому необходимо выбрать сообщение именно из целевого канала.
+func getMessageID(upd tg.UpdatesClass, channelID int64) (int, error) {
 	switch u := upd.(type) {
 	case *tg.Updates:
 		for _, up := range u.Updates {
-			if id, err := getMessageIDFromUpdate(up); err == nil {
+			if id, err := getMessageIDFromUpdate(up, channelID); err == nil {
 				return id, nil
 			}
 		}
 	case *tg.UpdatesCombined:
 		for _, up := range u.Updates {
-			if id, err := getMessageIDFromUpdate(up); err == nil {
+			if id, err := getMessageIDFromUpdate(up, channelID); err == nil {
 				return id, nil
 			}
 		}
 	case *tg.UpdateShort:
-		return getMessageIDFromUpdate(u.Update)
-	case *tg.UpdateShortMessage:
-		return u.ID, nil
-	case *tg.UpdateShortChatMessage:
-		return u.ID, nil
-	case *tg.UpdateShortSentMessage:
-		return u.ID, nil
+		return getMessageIDFromUpdate(u.Update, channelID)
 	}
-	return 0, fmt.Errorf("не удалось получить ID пересланного сообщения")
+	return 0, fmt.Errorf("не удалось получить ID пересланного сообщения для канала %d", channelID)
 }
 
-// getMessageIDFromUpdate разбирает отдельное обновление и ищет ID сообщения.
-func getMessageIDFromUpdate(up tg.UpdateClass) (int, error) {
+// getMessageIDFromUpdate разбирает обновление и ищет ID сообщения в нужном канале.
+func getMessageIDFromUpdate(up tg.UpdateClass, channelID int64) (int, error) {
 	switch v := up.(type) {
 	case *tg.UpdateNewMessage:
 		if m, ok := v.Message.(*tg.Message); ok {
-			return m.ID, nil
+			if peer, ok := m.PeerID.(*tg.PeerChannel); ok && peer.ChannelID == channelID {
+				return m.ID, nil
+			}
 		}
 	case *tg.UpdateNewChannelMessage:
 		if m, ok := v.Message.(*tg.Message); ok {
-			return m.ID, nil
+			if peer, ok := m.PeerID.(*tg.PeerChannel); ok && peer.ChannelID == channelID {
+				return m.ID, nil
+			}
 		}
 	case *tg.UpdateNewScheduledMessage:
 		if m, ok := v.Message.(*tg.Message); ok {
-			return m.ID, nil
+			if peer, ok := m.PeerID.(*tg.PeerChannel); ok && peer.ChannelID == channelID {
+				return m.ID, nil
+			}
 		}
 	}
 	return 0, fmt.Errorf("ID не найден")
@@ -166,7 +168,8 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 				}
 				return nil
 			}
-			forwardedID, err := getMessageID(res)
+			// Получаем ID пересланного сообщения именно из целевого канала
+			forwardedID, err := getMessageID(res, info.target.ID)
 			if err != nil {
 				log.Printf("[CHANNEL DUPLICATE] получение ID сообщения: %v", err)
 				return nil
