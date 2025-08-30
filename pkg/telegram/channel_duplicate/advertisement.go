@@ -15,6 +15,20 @@ var linkPattern = regexp.MustCompile(`https?://\S+`)
 func isAdvertisement(msg *tg.Message) bool {
 	text := strings.ToLower(msg.Message)
 
+	// Проверяем, что сообщение не переслано из другого канала
+	if fwd, ok := msg.GetFwdFrom(); ok {
+		// Forwarded из канала определяем по наличию ChannelPost
+		if _, ok := fwd.GetChannelPost(); ok {
+			return true
+		}
+		// или если источник указан как PeerChannel
+		if from, ok := fwd.GetFromID(); ok {
+			if _, ok := from.(*tg.PeerChannel); ok {
+				return true
+			}
+		}
+	}
+
 	// Проверяем ключевые слова в тексте
 	if strings.Contains(text, "erid") || strings.Contains(text, "ерид") {
 		return true

@@ -24,6 +24,17 @@ func TestIsAdvertisement(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "переслано из канала",
+			msg: func() *tg.Message {
+				f := tg.MessageFwdHeader{}
+				f.SetChannelPost(1)
+				m := &tg.Message{}
+				m.SetFwdFrom(f)
+				return m
+			}(),
+			want: true,
+		},
+		{
 			name: "erid в ссылке",
 			msg: &tg.Message{Message: "смотри", Entities: []tg.MessageEntityClass{
 				&tg.MessageEntityTextURL{URL: "https://a.com?erid=123"},
