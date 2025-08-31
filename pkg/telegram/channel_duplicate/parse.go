@@ -11,6 +11,9 @@ import (
 // Используем индексы для вычисления смещения и сохранения остальных частей строки.
 var mdLinkPattern = regexp.MustCompile(`\[(.+?)\]\((https?://[^\s)]+)\)`)
 
+// urlPattern ищет в тексте ссылку с протоколом http или https
+var urlPattern = regexp.MustCompile(`https?://`)
+
 // utf16Len возвращает длину строки в кодовых единицах UTF-16.
 func utf16Len(s string) int {
 	return len(utf16.Encode([]rune(s)))
@@ -40,4 +43,9 @@ func parseTextURL(text string, offset int) (*tg.MessageEntityTextURL, string) {
 
 	clean := prefix + label + suffix
 	return ent, clean
+}
+
+// hasURL проверяет, содержит ли строка URL с протоколом http/https
+func hasURL(text string) bool {
+	return urlPattern.MatchString(text)
 }

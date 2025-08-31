@@ -109,6 +109,9 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 		if isAdvertisement(msg) {
 			return nil
 		}
+		// Проверяем, есть ли в исходном сообщении предпросмотр ссылки
+		_, hasPreview := msg.Media.(*tg.MessageMediaWebPage)
+
 		// Формируем текст для публикации
 		text := msg.Message
 		needsEdit := false
@@ -125,8 +128,8 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 		// Сохраняем текст после удаления, чтобы знать смещение добавленного блока
 		baseText := text
 		var addText string
-		if info.add != nil && *info.add != "" {
-			// Добавляем текст в конец поста
+		if info.add != nil && *info.add != "" && !hasPreview {
+			// Добавляем текст в конец поста только если нет предпросмотра
 			addText = *info.add
 			text = baseText + addText
 			needsEdit = true
@@ -141,6 +144,9 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 			entities = adjustEntitiesAfterRemoval(entities, msg.Message, *info.remove)
 		}
 
+		// Проверяем наличие ссылок в тексте после удаления
+		linkDetected := !hasPreview && hasURL(baseText)
+
 		// Обрабатываем добавляемый текст и возможную ссылку в нём
 		if addText != "" {
 			editText = baseText + addText
@@ -148,8 +154,15 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 				// Используем очищенный текст и добавляем сущность ссылки
 				editText = baseText + clean
 				entities = append(entities, ent)
+				linkDetected = true
+			} else if hasURL(addText) {
+				// В добавляемом тексте обнаружена ссылка без Markdown
+				linkDetected = true
 			}
 		}
+
+		// Нужно ли отключить предпросмотр ссылок
+		disablePreview := linkDetected
 
 		// Если требуются изменения, работаем через отложенный пост
 		if needsEdit {
@@ -170,6 +183,10 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 			editReq.SetMessage(editText)
 			if len(entities) > 0 {
 				editReq.SetEntities(entities)
+			}
+			if disablePreview {
+				// Отключаем предпросмотр ссылок, если он появился после правок
+				editReq.SetNoWebpage(true)
 			}
 			editReq.SetScheduleDate(schedule)
 			// Логируем процесс редактирования отложенного поста
