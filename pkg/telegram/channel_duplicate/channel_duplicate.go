@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"regexp"
 	"strings"
 	"time"
+	"unicode/utf16"
 
 	"atg_go/pkg/storage"
 	base "atg_go/pkg/telegram/module"
@@ -137,9 +139,13 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 				return nil
 			}
 		}
+		// Сохраняем текст после удаления, чтобы знать смещение добавленного блока
+		baseText := text
+		var addText string
 		if info.add != nil && *info.add != "" {
 			// Добавляем текст в конец поста
-			text += *info.add
+			addText = *info.add
+			text = baseText + addText
 			needsEdit = true
 		}
 
@@ -159,8 +165,13 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 				Peer: &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
 				ID:   forwardedID,
 			}
-			editReq.SetMessage(text)
+			editReq.SetMessage(editText)
+			if len(entities) > 0 {
+				editReq.SetEntities(entities)
+			}
 			editReq.SetScheduleDate(schedule)
+			// Логируем процесс редактирования отложенного поста
+			log.Printf("[CHANNEL DUPLICATE] редактируем отложенное сообщение %d", forwardedID)
 			if _, err = api.MessagesEditMessage(ctx, &editReq); err != nil {
 				log.Printf("[CHANNEL DUPLICATE] редактирование сообщения %d: %v", forwardedID, err)
 				return nil
