@@ -23,50 +23,93 @@ type channelInfo struct {
 	add    *string     // Текст для добавления
 }
 
-// forwardScheduled пересылает сообщение в отложенные и возвращает его ID.
-// Идентификатор извлекается из ответа Telegram по random_id.
+// copyMessage публикует копию сообщения в целевом канале.
 // replyTo указывает, на какое сообщение нужно ответить в целевом канале.
-func forwardScheduled(ctx context.Context, api *tg.Client, donor *tg.Channel, target *tg.Channel, msgID int, schedule int, replyTo *int) (int, error) {
-	randomID := rand.Int63()
-	req := &tg.MessagesForwardMessagesRequest{
-		FromPeer:   &tg.InputPeerChannel{ChannelID: donor.ID, AccessHash: donor.AccessHash},
-		ID:         []int{msgID},
-		ToPeer:     &tg.InputPeerChannel{ChannelID: target.ID, AccessHash: target.AccessHash},
-		RandomID:   []int64{randomID},
-		DropAuthor: true,
-	}
+func copyMessage(ctx context.Context, api *tg.Client, donor *tg.Channel, target *tg.Channel, msg *tg.Message, text string, entities []tg.MessageEntityClass, disablePreview bool, replyTo *int) error {
+	peer := &tg.InputPeerChannel{ChannelID: target.ID, AccessHash: target.AccessHash}
+
+	// Формируем ответ на указанное сообщение
+	var reply tg.InputReplyToClass
 	if replyTo != nil {
-		req.SetReplyTo(&tg.InputReplyToMessage{ReplyToMsgID: *replyTo})
-	}
-	req.SetScheduleDate(schedule)
-
-	upd, err := api.MessagesForwardMessages(ctx, req)
-	if err != nil {
-		return 0, err
+		reply = &tg.InputReplyToMessage{ReplyToMsgID: *replyTo}
 	}
 
-	var updates []tg.UpdateClass
-	switch u := upd.(type) {
-	case *tg.Updates:
-		updates = u.Updates
-	case *tg.UpdatesCombined:
-		updates = u.Updates
-	default:
-		return 0, fmt.Errorf("неожиданный тип ответа %T", upd)
-	}
-	for _, u := range updates {
-		switch up := u.(type) {
-		case *tg.UpdateMessageID:
-			if up.RandomID == randomID {
-				return up.ID, nil
-			}
-		case *tg.UpdateNewScheduledMessage:
-			if m, ok := up.Message.(*tg.Message); ok {
-				return m.ID, nil
-			}
+	switch m := msg.Media.(type) {
+	case nil, *tg.MessageMediaEmpty, *tg.MessageMediaWebPage:
+		// Текстовое сообщение без вложений
+		req := &tg.MessagesSendMessageRequest{
+			Peer:     peer,
+			Message:  text,
+			RandomID: rand.Int63(),
 		}
+		if reply != nil {
+			req.SetReplyTo(reply)
+		}
+		if disablePreview {
+			req.SetNoWebpage(true)
+		}
+		if len(entities) > 0 {
+			req.SetEntities(entities)
+		}
+		_, err := api.MessagesSendMessage(ctx, req)
+		return err
+	case *tg.MessageMediaPhoto:
+		// Копируем фото
+		photo, ok := m.Photo.(*tg.Photo)
+		if !ok {
+			return fmt.Errorf("фото отсутствует в медиа")
+		}
+		media := &tg.InputMediaPhoto{ID: &tg.InputPhoto{ID: photo.ID, AccessHash: photo.AccessHash, FileReference: photo.FileReference}}
+		req := &tg.MessagesSendMediaRequest{
+			Peer:     peer,
+			Media:    media,
+			Message:  text,
+			RandomID: rand.Int63(),
+		}
+		if reply != nil {
+			req.SetReplyTo(reply)
+		}
+		if len(entities) > 0 {
+			req.SetEntities(entities)
+		}
+		_, err := api.MessagesSendMedia(ctx, req)
+		return err
+	case *tg.MessageMediaDocument:
+		// Копируем документ (видео, аудио, кружочки и т.п.)
+		doc, ok := m.Document.(*tg.Document)
+		if !ok {
+			return fmt.Errorf("документ отсутствует в медиа")
+		}
+		media := &tg.InputMediaDocument{ID: &tg.InputDocument{ID: doc.ID, AccessHash: doc.AccessHash, FileReference: doc.FileReference}}
+		req := &tg.MessagesSendMediaRequest{
+			Peer:     peer,
+			Media:    media,
+			Message:  text,
+			RandomID: rand.Int63(),
+		}
+		if reply != nil {
+			req.SetReplyTo(reply)
+		}
+		if len(entities) > 0 {
+			req.SetEntities(entities)
+		}
+		_, err := api.MessagesSendMedia(ctx, req)
+		return err
+	default:
+		// Неизвестный тип медиа — пересылаем, чтобы не потерять сообщение
+		fReq := &tg.MessagesForwardMessagesRequest{
+			FromPeer:   &tg.InputPeerChannel{ChannelID: donor.ID, AccessHash: donor.AccessHash},
+			ID:         []int{msg.ID},
+			ToPeer:     peer,
+			RandomID:   []int64{rand.Int63()},
+			DropAuthor: true,
+		}
+		if reply != nil {
+			fReq.SetReplyTo(reply)
+		}
+		_, err := api.MessagesForwardMessages(ctx, fReq)
+		return err
 	}
-	return 0, fmt.Errorf("ID отложенного сообщения не найден")
 }
 
 // findReplyTarget подбирает сообщение в целевом канале, к которому нужно привязать ответ.
@@ -234,105 +277,40 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 		// Проверяем, есть ли в исходном сообщении предпросмотр ссылки
 		_, hasPreview := msg.Media.(*tg.MessageMediaWebPage)
 
-		// Формируем текст для публикации
+		// Исходный текст и сущности
 		text := msg.Message
-		needsEdit := false
+		entities := msg.Entities
+
+		// Удаляем указанный фрагмент из текста
 		if info.remove != nil && *info.remove != "" {
 			if strings.Contains(text, *info.remove) {
-				// Удаляем указанный фрагмент
 				text = strings.ReplaceAll(text, *info.remove, "")
-				needsEdit = true
+				entities = adjustEntitiesAfterRemoval(entities, msg.Message, *info.remove)
 			}
 		}
-		// Сохраняем текст после удаления, чтобы знать смещение добавленного блока
+
 		baseText := text
-		var addText string
-		if info.add != nil && *info.add != "" && !hasPreview {
-			// Добавляем текст в конец поста только если нет предпросмотра
-			addText = *info.add
-			text = baseText + addText
-			needsEdit = true
-		}
-
-		// Готовим текст и сущности для последующего редактирования
-		entities := msg.Entities
-		editText := baseText
-
-		// Корректируем смещения форматирования после удаления фрагмента
-		if info.remove != nil && *info.remove != "" {
-			entities = adjustEntitiesAfterRemoval(entities, msg.Message, *info.remove)
-		}
-
-		// Проверяем наличие ссылок в тексте после удаления
 		linkDetected := !hasPreview && hasURL(baseText)
 
-		// Обрабатываем добавляемый текст и возможную ссылку в нём
-		if addText != "" {
-			editText = baseText + addText
+		// Добавляем текст в конец поста, если это разрешено
+		if info.add != nil && *info.add != "" && !hasPreview {
+			addText := *info.add
 			if ent, clean := parseTextURL(addText, utf16Len(baseText)); ent != nil {
-				// Используем очищенный текст и добавляем сущность ссылки
-				editText = baseText + clean
+				text = baseText + clean
 				entities = append(entities, ent)
 				linkDetected = true
-			} else if hasURL(addText) {
-				// В добавляемом тексте обнаружена ссылка без Markdown
-				linkDetected = true
+			} else {
+				text = baseText + addText
+				if hasURL(addText) {
+					linkDetected = true
+				}
 			}
 		}
 
-		// Нужно ли отключить предпросмотр ссылок
 		disablePreview := linkDetected
 
-		// Если требуются изменения, работаем через отложенный пост
-		if needsEdit {
-			schedule := int(time.Now().AddDate(0, 4, 0).Unix())
-			forwardedID, err := forwardScheduled(ctx, api, info.donor, info.target, msg.ID, schedule, replyTo)
-			if err != nil {
-				saveErr := db.SaveSos(fmt.Sprintf("не удалось переслать пост %d с канала %d: %v", msg.ID, info.donor.ID, err))
-				if saveErr != nil {
-					log.Printf("[CHANNEL DUPLICATE] ошибка записи в Sos: %v", saveErr)
-				}
-				return nil
-			}
-			editReq := tg.MessagesEditMessageRequest{
-				Peer: &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
-				ID:   forwardedID,
-			}
-			editReq.SetMessage(editText)
-			if len(entities) > 0 {
-				editReq.SetEntities(entities)
-			}
-			if disablePreview {
-				// Отключаем предпросмотр ссылок, если он появился после правок
-				editReq.SetNoWebpage(true)
-			}
-			editReq.SetScheduleDate(schedule)
-			if _, err = api.MessagesEditMessage(ctx, &editReq); err != nil {
-				log.Printf("[CHANNEL DUPLICATE] редактирование сообщения %d: %v", forwardedID, err)
-				return nil
-			}
-			if _, err = api.MessagesSendScheduledMessages(ctx, &tg.MessagesSendScheduledMessagesRequest{
-				Peer: &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
-				ID:   []int{forwardedID},
-			}); err != nil {
-				log.Printf("[CHANNEL DUPLICATE] публикация отложенного сообщения %d: %v", forwardedID, err)
-			}
-			return nil
-		}
-
-		// Изменения не требуются — пересылаем пост сразу
-		fReq := &tg.MessagesForwardMessagesRequest{
-			FromPeer:   &tg.InputPeerChannel{ChannelID: info.donor.ID, AccessHash: info.donor.AccessHash},
-			ID:         []int{msg.ID},
-			ToPeer:     &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
-			RandomID:   []int64{rand.Int63()},
-			DropAuthor: true,
-		}
-		if replyTo != nil {
-			fReq.SetReplyTo(&tg.InputReplyToMessage{ReplyToMsgID: *replyTo})
-		}
-		if _, err := api.MessagesForwardMessages(ctx, fReq); err != nil {
-			saveErr := db.SaveSos(fmt.Sprintf("не удалось переслать пост %d с канала %d: %v", msg.ID, info.donor.ID, err))
+		if err := copyMessage(ctx, api, info.donor, info.target, msg, text, entities, disablePreview, replyTo); err != nil {
+			saveErr := db.SaveSos(fmt.Sprintf("не удалось скопировать пост %d с канала %d: %v", msg.ID, info.donor.ID, err))
 			if saveErr != nil {
 				log.Printf("[CHANNEL DUPLICATE] ошибка записи в Sos: %v", saveErr)
 			}
