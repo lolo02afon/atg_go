@@ -15,13 +15,7 @@ func TestAdjustEntitiesAfterRemoval(t *testing.T) {
 		Length: utf16Len("жирный"),
 	}
 	ents := []tg.MessageEntityClass{bold}
-
-	cloned := cloneEntities(ents)
-	adjusted := adjustEntitiesAfterRemoval(cloned, text, remove)
-
-	if bold.Offset != utf16Len("Удалить: ") {
-		t.Fatalf("исходная сущность изменена")
-	}
+	adjusted := adjustEntitiesAfterRemoval(ents, text, remove)
 	if len(adjusted) != 1 {
 		t.Fatalf("ожидалось 1 сущность, получено %d", len(adjusted))
 	}

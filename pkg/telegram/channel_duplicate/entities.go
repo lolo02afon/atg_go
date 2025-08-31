@@ -7,20 +7,6 @@ import (
 	"github.com/gotd/td/tg"
 )
 
-// cloneEntities создаёт глубокую копию среза сущностей сообщения.
-func cloneEntities(src []tg.MessageEntityClass) []tg.MessageEntityClass {
-	if len(src) == 0 {
-		return nil
-	}
-	dst := make([]tg.MessageEntityClass, len(src))
-	for i, e := range src {
-		v := reflect.New(reflect.TypeOf(e).Elem())
-		v.Elem().Set(reflect.ValueOf(e).Elem())
-		dst[i] = v.Interface().(tg.MessageEntityClass)
-	}
-	return dst
-}
-
 // adjustEntitiesAfterRemoval сдвигает смещения сущностей после удаления фрагмента текста.
 // Предполагается, что удаляемый фрагмент не содержит собственного форматирования.
 func adjustEntitiesAfterRemoval(entities []tg.MessageEntityClass, original, remove string) []tg.MessageEntityClass {
