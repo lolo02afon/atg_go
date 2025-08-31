@@ -6,6 +6,7 @@ package models
 // channel_donor_tgid - ID телеграм-канала источника
 // post_text_remove - текст, который нужно удалить из поста
 // post_text_add - текст, который нужно добавить в конец поста
+//                Ссылки задаются как [текст](url) или текст|url
 //
 // Комментарии в коде на русском языке по требованию пользователя
 
@@ -15,6 +16,6 @@ type ChannelDuplicate struct {
 	URLChannelDonor  string  `json:"url_channel_donor"`  // Ссылка на канал-источник
 	ChannelDonorTGID *string `json:"channel_donor_tgid"` // ID телеграм-канала источника
 	PostTextRemove   *string `json:"post_text_remove"`   // Текст для удаления
-	PostTextAdd      *string `json:"post_text_add"`      // Текст для добавления
+	PostTextAdd      *string `json:"post_text_add"`      // Текст для добавления; ссылки: [текст](url) или текст|url
 	LastPostID       *int    `json:"last_post_id"`       // ID последнего пересланного поста
 }
