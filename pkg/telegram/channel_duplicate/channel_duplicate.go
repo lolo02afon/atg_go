@@ -67,21 +67,11 @@ func forwardScheduled(ctx context.Context, api *tg.Client, donor *tg.Channel, ta
 	return 0, fmt.Errorf("ID отложенного сообщения не найден")
 }
 
-// parseTextURL ищет в тексте ссылку формата [текст](url) или текст|url
+// parseTextURL ищет в тексте ссылку формата [текст](url)
 // и возвращает сущность для Telegram и очищенный текст без служебных символов.
 func parseTextURL(text string, baseOffset int) (*tg.MessageEntityTextURL, string) {
 	markdown := regexp.MustCompile(`\[([^\]]+)\]\((https?://[^\s]+)\)`)
 	if loc := markdown.FindStringSubmatchIndex(text); loc != nil {
-		visible := text[loc[2]:loc[3]]
-		url := text[loc[4]:loc[5]]
-		offset := baseOffset + utf8.RuneCountInString(text[:loc[2]])
-		length := utf8.RuneCountInString(visible)
-		clean := text[:loc[0]] + visible + text[loc[1]:]
-		ent := &tg.MessageEntityTextURL{Offset: offset, Length: length, URL: url}
-		return ent, clean
-	}
-	pipe := regexp.MustCompile(`([^|]+)\|(https?://\S+)`)
-	if loc := pipe.FindStringSubmatchIndex(text); loc != nil {
 		visible := text[loc[2]:loc[3]]
 		url := text[loc[4]:loc[5]]
 		offset := baseOffset + utf8.RuneCountInString(text[:loc[2]])
@@ -195,7 +185,7 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 			if addText != "" {
 				if ent, clean := parseTextURL(addText, utf8.RuneCountInString(baseText)); ent != nil {
 					editReq.SetMessage(baseText + clean)
-					editReq.Entities = append(editReq.Entities, ent)
+					editReq.SetEntities([]tg.MessageEntityClass{ent})
 				}
 			}
 			editReq.SetScheduleDate(schedule)
