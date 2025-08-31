@@ -133,14 +133,22 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 		}
 
 		// Готовим текст и сущности для редактирования
-		editText := text
-		var entities []tg.MessageEntityClass
+		editText := baseText + addText
+		// Копируем исходные сущности, чтобы не изменять оригинал
+		entities := cloneEntities(msg.Entities)
+		// Корректируем смещения сущностей после удаления фрагмента
+		if info.remove != nil && *info.remove != "" {
+			entities = adjustEntitiesAfterRemoval(entities, msg.Message, *info.remove)
+		}
+		// Обрабатываем добавляемый текст и возможную ссылку в нём
 		if addText != "" {
 			if ent, clean := parseTextURL(addText, utf16Len(baseText)); ent != nil {
 				// Используем очищенный текст и сохраняем сущность ссылки
 				editText = baseText + clean
 				entities = append(entities, ent)
 			}
+		} else {
+			editText = baseText
 		}
 
 		// Если требуются изменения, работаем через отложенный пост
