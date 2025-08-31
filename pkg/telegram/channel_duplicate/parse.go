@@ -8,6 +8,7 @@ import (
 )
 
 // mdLinkPattern распознаёт Markdown-ссылку вида [текст](URL).
+// Используем индексы для вычисления смещения и сохранения остальных частей строки.
 var mdLinkPattern = regexp.MustCompile(`\[(.+?)\]\((https?://[^\s)]+)\)`)
 
 // utf16Len возвращает длину строки в кодовых единицах UTF-16.
@@ -17,18 +18,26 @@ func utf16Len(s string) int {
 
 // parseTextURL извлекает из текста Markdown-ссылку и формирует сущность Telegram.
 // offset — смещение начала текста в UTF-16 относительно всей строки сообщения.
+// Возвращается сущность ссылки и строка без Markdown-разметки.
 func parseTextURL(text string, offset int) (*tg.MessageEntityTextURL, string) {
-	match := mdLinkPattern.FindStringSubmatch(text)
-	if len(match) != 3 {
+	idx := mdLinkPattern.FindStringSubmatchIndex(text)
+	if len(idx) != 6 {
 		// Возвращаем исходный текст, если ссылка не распознана
 		return nil, text
 	}
-	label := match[1]
-	url := match[2]
+	// Извлекаем части строки до и после ссылки
+	prefix := text[:idx[0]]
+	label := text[idx[2]:idx[3]]
+	url := text[idx[4]:idx[5]]
+	suffix := text[idx[1]:]
+
+	// Вычисляем смещение начала кликабельного текста
 	ent := &tg.MessageEntityTextURL{
-		Offset: offset,
+		Offset: offset + utf16Len(prefix),
 		Length: utf16Len(label),
 		URL:    url,
 	}
-	return ent, label
+
+	clean := prefix + label + suffix
+	return ent, clean
 }
