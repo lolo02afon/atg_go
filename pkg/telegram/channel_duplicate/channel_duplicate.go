@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"regexp"
 	"strings"
 	"time"
-	"unicode/utf16"
 
 	"atg_go/pkg/storage"
 	base "atg_go/pkg/telegram/module"
@@ -147,6 +145,17 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 			addText = *info.add
 			text = baseText + addText
 			needsEdit = true
+		}
+
+		// Готовим текст и сущности для редактирования
+		editText := text
+		var entities []tg.MessageEntityClass
+		if addText != "" {
+			if ent, clean := parseTextURL(addText, utf16Len(baseText)); ent != nil {
+				// Используем очищенный текст и сохраняем сущность ссылки
+				editText = baseText + clean
+				entities = append(entities, ent)
+			}
 		}
 
 		// Если требуются изменения, работаем через отложенный пост
