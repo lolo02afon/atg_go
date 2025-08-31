@@ -81,7 +81,8 @@ func parseTextURL(text string, baseOffset int) (*tg.MessageEntityTextURL, string
 		visible := text[loc[2]:loc[3]]
 		url := text[loc[4]:loc[5]]
 		// Смещения считаются в UTF-16, поэтому используем utf16Len
-		offset := baseOffset + utf16Len(text[:loc[2]])
+		// Offset указывает на позицию видимого текста без учёта служебных символов
+		offset := baseOffset + utf16Len(text[:loc[0]])
 		length := utf16Len(visible)
 		clean := text[:loc[0]] + visible + text[loc[1]:]
 		ent := &tg.MessageEntityTextURL{Offset: offset, Length: length, URL: url}
@@ -183,13 +184,20 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 				}
 				return nil
 			}
+			// Логируем ID отложенного сообщения
+			log.Printf("[CHANNEL DUPLICATE] пост %d сохранён в отложенных как %d", msg.ID, forwardedID)
+
 			editText := text
 			var entities []tg.MessageEntityClass
 			// Анализируем добавленный текст на наличие ссылки и формируем сущность
 			if addText != "" {
 				if ent, clean := parseTextURL(addText, utf16Len(baseText)); ent != nil {
+					// Логируем параметры найденной ссылки
+					log.Printf("[CHANNEL DUPLICATE] найдена ссылка offset=%d длина=%d url=%s", ent.Offset, ent.Length, ent.URL)
 					editText = baseText + clean
 					entities = []tg.MessageEntityClass{ent}
+				} else {
+					log.Printf("[CHANNEL DUPLICATE] ссылка в добавке не обнаружена")
 				}
 			}
 			editReq := tg.MessagesEditMessageRequest{
@@ -201,15 +209,22 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 				editReq.SetEntities(entities)
 			}
 			editReq.SetScheduleDate(schedule)
+			// Отражаем подготовку запроса редактирования
+			log.Printf("[CHANNEL DUPLICATE] редактирование отложенного поста %d (сущностей %d)", forwardedID, len(entities))
 			if _, err = api.MessagesEditMessage(ctx, &editReq); err != nil {
 				log.Printf("[CHANNEL DUPLICATE] редактирование сообщения: %v", err)
 				return nil
 			}
+			log.Printf("[CHANNEL DUPLICATE] отложенный пост %d отредактирован", forwardedID)
+
+			log.Printf("[CHANNEL DUPLICATE] публикация отложенного поста %d", forwardedID)
 			if _, err = api.MessagesSendScheduledMessages(ctx, &tg.MessagesSendScheduledMessagesRequest{
 				Peer: &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
 				ID:   []int{forwardedID},
 			}); err != nil {
 				log.Printf("[CHANNEL DUPLICATE] публикация отложенного сообщения: %v", err)
+			} else {
+				log.Printf("[CHANNEL DUPLICATE] отложенный пост %d опубликован", forwardedID)
 			}
 			return nil
 		}
