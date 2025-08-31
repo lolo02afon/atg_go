@@ -118,23 +118,8 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 				text = strings.ReplaceAll(text, *info.remove, "")
 				needsEdit = true
 			} else {
-				// Если требуемый фрагмент не найден, оставляем пост в отложенных
-				schedule := int(time.Now().AddDate(0, 4, 0).Unix())
-				req := &tg.MessagesForwardMessagesRequest{
-					FromPeer:   &tg.InputPeerChannel{ChannelID: info.donor.ID, AccessHash: info.donor.AccessHash},
-					ID:         []int{msg.ID},
-					ToPeer:     &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
-					RandomID:   []int64{rand.Int63()},
-					DropAuthor: true,
-				}
-				req.SetScheduleDate(schedule)
-				if _, err := api.MessagesForwardMessages(ctx, req); err != nil {
-					saveErr := db.SaveSos(fmt.Sprintf("не удалось переслать пост %d с канала %d: %v", msg.ID, info.donor.ID, err))
-					if saveErr != nil {
-						log.Printf("[CHANNEL DUPLICATE] ошибка записи в Sos: %v", saveErr)
-					}
-				}
-				return nil
+				// Фрагмент для удаления не найден — просто логируем и продолжаем публикацию
+				log.Printf("[CHANNEL DUPLICATE] фрагмент '%s' не найден в сообщении %d", *info.remove, msg.ID)
 			}
 		}
 		// Сохраняем текст после удаления, чтобы знать смещение добавленного блока
