@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"atg_go/pkg/storage"
 	base "atg_go/pkg/telegram/module"
@@ -63,6 +65,32 @@ func forwardScheduled(ctx context.Context, api *tg.Client, donor *tg.Channel, ta
 		}
 	}
 	return 0, fmt.Errorf("ID отложенного сообщения не найден")
+}
+
+// parseTextURL ищет в тексте ссылку формата [текст](url) или текст|url
+// и возвращает сущность для Telegram и очищенный текст без служебных символов.
+func parseTextURL(text string, baseOffset int) (*tg.MessageEntityTextURL, string) {
+	markdown := regexp.MustCompile(`\[([^\]]+)\]\((https?://[^\s]+)\)`)
+	if loc := markdown.FindStringSubmatchIndex(text); loc != nil {
+		visible := text[loc[2]:loc[3]]
+		url := text[loc[4]:loc[5]]
+		offset := baseOffset + utf8.RuneCountInString(text[:loc[2]])
+		length := utf8.RuneCountInString(visible)
+		clean := text[:loc[0]] + visible + text[loc[1]:]
+		ent := &tg.MessageEntityTextURL{Offset: offset, Length: length, URL: url}
+		return ent, clean
+	}
+	pipe := regexp.MustCompile(`([^|]+)\|(https?://\S+)`)
+	if loc := pipe.FindStringSubmatchIndex(text); loc != nil {
+		visible := text[loc[2]:loc[3]]
+		url := text[loc[4]:loc[5]]
+		offset := baseOffset + utf8.RuneCountInString(text[:loc[2]])
+		length := utf8.RuneCountInString(visible)
+		clean := text[:loc[0]] + visible + text[loc[1]:]
+		ent := &tg.MessageEntityTextURL{Offset: offset, Length: length, URL: url}
+		return ent, clean
+	}
+	return nil, text
 }
 
 // Connect присоединяет модуль дублирования каналов к существующему клиенту Telegram.
@@ -137,9 +165,13 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 				return nil
 			}
 		}
+		// Сохраняем текст после удаления, чтобы знать смещение добавленного блока
+		baseText := text
+		var addText string
 		if info.add != nil && *info.add != "" {
 			// Добавляем текст в конец поста
-			text += *info.add
+			addText = *info.add
+			text = baseText + addText
 			needsEdit = true
 		}
 
@@ -159,6 +191,13 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 				ID:   forwardedID,
 			}
 			editReq.SetMessage(text)
+			// Анализируем добавленный текст на наличие ссылки и формируем сущность
+			if addText != "" {
+				if ent, clean := parseTextURL(addText, utf8.RuneCountInString(baseText)); ent != nil {
+					editReq.SetMessage(baseText + clean)
+					editReq.Entities = append(editReq.Entities, ent)
+				}
+			}
 			editReq.SetScheduleDate(schedule)
 			if _, err = api.MessagesEditMessage(ctx, &editReq); err != nil {
 				log.Printf("[CHANNEL DUPLICATE] редактирование сообщения: %v", err)
