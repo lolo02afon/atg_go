@@ -160,15 +160,21 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 			}
 			editReq.SetMessage(text)
 			editReq.SetScheduleDate(schedule)
+			// Логируем процесс редактирования отложенного поста
+			log.Printf("[CHANNEL DUPLICATE] редактируем отложенное сообщение %d", forwardedID)
 			if _, err = api.MessagesEditMessage(ctx, &editReq); err != nil {
-				log.Printf("[CHANNEL DUPLICATE] редактирование сообщения: %v", err)
+				log.Printf("[CHANNEL DUPLICATE] редактирование сообщения %d: %v", forwardedID, err)
 				return nil
 			}
+			// Логируем процесс публикации отложенного поста
+			log.Printf("[CHANNEL DUPLICATE] публикуем отложенное сообщение %d", forwardedID)
 			if _, err = api.MessagesSendScheduledMessages(ctx, &tg.MessagesSendScheduledMessagesRequest{
 				Peer: &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
 				ID:   []int{forwardedID},
 			}); err != nil {
-				log.Printf("[CHANNEL DUPLICATE] публикация отложенного сообщения: %v", err)
+				log.Printf("[CHANNEL DUPLICATE] публикация отложенного сообщения %d: %v", forwardedID, err)
+			} else {
+				log.Printf("[CHANNEL DUPLICATE] отложенное сообщение %d опубликовано", forwardedID)
 			}
 			return nil
 		}
