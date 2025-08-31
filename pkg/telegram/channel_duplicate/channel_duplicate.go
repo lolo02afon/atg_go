@@ -25,7 +25,8 @@ type channelInfo struct {
 
 // forwardScheduled пересылает сообщение в отложенные и возвращает его ID.
 // Идентификатор извлекается из ответа Telegram по random_id.
-func forwardScheduled(ctx context.Context, api *tg.Client, donor *tg.Channel, target *tg.Channel, msgID int, schedule int) (int, error) {
+// replyTo указывает, на какое сообщение нужно ответить в целевом канале.
+func forwardScheduled(ctx context.Context, api *tg.Client, donor *tg.Channel, target *tg.Channel, msgID int, schedule int, replyTo *int) (int, error) {
 	randomID := rand.Int63()
 	req := &tg.MessagesForwardMessagesRequest{
 		FromPeer:   &tg.InputPeerChannel{ChannelID: donor.ID, AccessHash: donor.AccessHash},
@@ -33,6 +34,9 @@ func forwardScheduled(ctx context.Context, api *tg.Client, donor *tg.Channel, ta
 		ToPeer:     &tg.InputPeerChannel{ChannelID: target.ID, AccessHash: target.AccessHash},
 		RandomID:   []int64{randomID},
 		DropAuthor: true,
+	}
+	if replyTo != nil {
+		req.SetReplyTo(&tg.InputReplyToMessage{ReplyToMsgID: *replyTo})
 	}
 	req.SetScheduleDate(schedule)
 
@@ -63,6 +67,115 @@ func forwardScheduled(ctx context.Context, api *tg.Client, donor *tg.Channel, ta
 		}
 	}
 	return 0, fmt.Errorf("ID отложенного сообщения не найден")
+}
+
+// findReplyTarget подбирает сообщение в целевом канале, к которому нужно привязать ответ.
+// Если подходящее сообщение не найдено, возвращается 0.
+func findReplyTarget(ctx context.Context, api *tg.Client, donor *tg.Channel, target *tg.Channel, msg *tg.Message) (int, error) {
+	// Проверяем, является ли сообщение ответом в исходном канале
+	replyHdr, ok := msg.GetReplyTo()
+	if !ok {
+		return 0, nil
+	}
+	hdr, ok := replyHdr.(*tg.MessageReplyHeader)
+	if !ok {
+		return 0, nil
+	}
+	parentID, ok := hdr.GetReplyToMsgID()
+	if !ok {
+		return 0, nil
+	}
+
+	// Получаем дату родительского сообщения на канале-источнике
+	res, err := api.ChannelsGetMessages(ctx, &tg.ChannelsGetMessagesRequest{
+		Channel: &tg.InputChannel{ChannelID: donor.ID, AccessHash: donor.AccessHash},
+		ID:      []tg.InputMessageClass{&tg.InputMessageID{ID: parentID}},
+	})
+	if err != nil {
+		return 0, err
+	}
+	var parentDate int
+	switch m := res.(type) {
+	case *tg.MessagesChannelMessages:
+		if len(m.Messages) == 0 {
+			return 0, nil
+		}
+		if pm, ok := m.Messages[0].(*tg.Message); ok {
+			parentDate = pm.Date
+		} else {
+			return 0, nil
+		}
+	case *tg.MessagesMessages:
+		if len(m.Messages) == 0 {
+			return 0, nil
+		}
+		if pm, ok := m.Messages[0].(*tg.Message); ok {
+			parentDate = pm.Date
+		} else {
+			return 0, nil
+		}
+	default:
+		return 0, fmt.Errorf("неожиданный тип ответа %T", res)
+	}
+
+	peer := &tg.InputPeerChannel{ChannelID: target.ID, AccessHash: target.AccessHash}
+	// Сначала ищем сообщение с тем же временем
+	searchReq := &tg.MessagesSearchRequest{
+		Peer:    peer,
+		Q:       "",
+		Filter:  &tg.InputMessagesFilterEmpty{},
+		MinDate: parentDate,
+		MaxDate: parentDate,
+		Limit:   1,
+	}
+	sr, err := api.MessagesSearch(ctx, searchReq)
+	if err != nil {
+		return 0, err
+	}
+	cand := extractFirstMessage(sr)
+	if cand == nil {
+		// Берём ближайший пост, опубликованный после указанного времени
+		searchReq.MaxDate = 0
+		sr, err = api.MessagesSearch(ctx, searchReq)
+		if err != nil {
+			return 0, err
+		}
+		cand = extractFirstMessage(sr)
+		if cand == nil {
+			return 0, nil
+		}
+	}
+	parentTime := time.Unix(int64(parentDate), 0)
+	candTime := time.Unix(int64(cand.Date), 0)
+	if candTime.Sub(parentTime) > 20*time.Minute {
+		return 0, nil
+	}
+	return cand.ID, nil
+}
+
+// extractFirstMessage извлекает первое сообщение из ответа поиска Telegram.
+func extractFirstMessage(res tg.MessagesMessagesClass) *tg.Message {
+	switch m := res.(type) {
+	case *tg.MessagesMessages:
+		if len(m.Messages) > 0 {
+			if msg, ok := m.Messages[0].(*tg.Message); ok {
+				return msg
+			}
+		}
+	case *tg.MessagesMessagesSlice:
+		if len(m.Messages) > 0 {
+			if msg, ok := m.Messages[0].(*tg.Message); ok {
+				return msg
+			}
+		}
+	case *tg.MessagesChannelMessages:
+		if len(m.Messages) > 0 {
+			if msg, ok := m.Messages[0].(*tg.Message); ok {
+				return msg
+			}
+		}
+	}
+	return nil
 }
 
 // Connect присоединяет модуль дублирования каналов к существующему клиенту Telegram.
@@ -109,6 +222,15 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 		if isAdvertisement(msg) {
 			return nil
 		}
+
+		// Определяем, нужно ли публиковать сообщение как ответ
+		var replyTo *int
+		if id, err := findReplyTarget(ctx, api, info.donor, info.target, msg); err != nil {
+			log.Printf("[CHANNEL DUPLICATE] поиск сообщения для ответа: %v", err)
+		} else if id != 0 {
+			replyTo = &id
+		}
+
 		// Проверяем, есть ли в исходном сообщении предпросмотр ссылки
 		_, hasPreview := msg.Media.(*tg.MessageMediaWebPage)
 
@@ -167,7 +289,7 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 		// Если требуются изменения, работаем через отложенный пост
 		if needsEdit {
 			schedule := int(time.Now().AddDate(0, 4, 0).Unix())
-			forwardedID, err := forwardScheduled(ctx, api, info.donor, info.target, msg.ID, schedule)
+			forwardedID, err := forwardScheduled(ctx, api, info.donor, info.target, msg.ID, schedule, replyTo)
 			if err != nil {
 				saveErr := db.SaveSos(fmt.Sprintf("не удалось переслать пост %d с канала %d: %v", msg.ID, info.donor.ID, err))
 				if saveErr != nil {
@@ -209,13 +331,17 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 		}
 
 		// Изменения не требуются — пересылаем пост сразу
-		if _, err := api.MessagesForwardMessages(ctx, &tg.MessagesForwardMessagesRequest{
+		fReq := &tg.MessagesForwardMessagesRequest{
 			FromPeer:   &tg.InputPeerChannel{ChannelID: info.donor.ID, AccessHash: info.donor.AccessHash},
 			ID:         []int{msg.ID},
 			ToPeer:     &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
 			RandomID:   []int64{rand.Int63()},
 			DropAuthor: true,
-		}); err != nil {
+		}
+		if replyTo != nil {
+			fReq.SetReplyTo(&tg.InputReplyToMessage{ReplyToMsgID: *replyTo})
+		}
+		if _, err := api.MessagesForwardMessages(ctx, fReq); err != nil {
 			saveErr := db.SaveSos(fmt.Sprintf("не удалось переслать пост %d с канала %d: %v", msg.ID, info.donor.ID, err))
 			if saveErr != nil {
 				log.Printf("[CHANNEL DUPLICATE] ошибка записи в Sos: %v", saveErr)
