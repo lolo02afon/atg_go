@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"unicode/utf8"
+	"unicode/utf16"
 
 	"atg_go/pkg/storage"
 	base "atg_go/pkg/telegram/module"
@@ -67,6 +67,12 @@ func forwardScheduled(ctx context.Context, api *tg.Client, donor *tg.Channel, ta
 	return 0, fmt.Errorf("ID отложенного сообщения не найден")
 }
 
+// utf16Len возвращает длину строки в кодовых единицах UTF-16.
+// Telegram измеряет смещения сущностей именно в этих единицах.
+func utf16Len(s string) int {
+	return len(utf16.Encode([]rune(s)))
+}
+
 // parseTextURL ищет в тексте ссылку формата [текст](url)
 // и возвращает сущность для Telegram и очищенный текст без служебных символов.
 func parseTextURL(text string, baseOffset int) (*tg.MessageEntityTextURL, string) {
@@ -74,8 +80,9 @@ func parseTextURL(text string, baseOffset int) (*tg.MessageEntityTextURL, string
 	if loc := markdown.FindStringSubmatchIndex(text); loc != nil {
 		visible := text[loc[2]:loc[3]]
 		url := text[loc[4]:loc[5]]
-		offset := baseOffset + utf8.RuneCountInString(text[:loc[2]])
-		length := utf8.RuneCountInString(visible)
+		// Смещения считаются в UTF-16, поэтому используем utf16Len
+		offset := baseOffset + utf16Len(text[:loc[2]])
+		length := utf16Len(visible)
 		clean := text[:loc[0]] + visible + text[loc[1]:]
 		ent := &tg.MessageEntityTextURL{Offset: offset, Length: length, URL: url}
 		return ent, clean
@@ -176,17 +183,22 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 				}
 				return nil
 			}
+			editText := text
+			var entities []tg.MessageEntityClass
+			// Анализируем добавленный текст на наличие ссылки и формируем сущность
+			if addText != "" {
+				if ent, clean := parseTextURL(addText, utf16Len(baseText)); ent != nil {
+					editText = baseText + clean
+					entities = []tg.MessageEntityClass{ent}
+				}
+			}
 			editReq := tg.MessagesEditMessageRequest{
 				Peer: &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
 				ID:   forwardedID,
 			}
-			editReq.SetMessage(text)
-			// Анализируем добавленный текст на наличие ссылки и формируем сущность
-			if addText != "" {
-				if ent, clean := parseTextURL(addText, utf8.RuneCountInString(baseText)); ent != nil {
-					editReq.SetMessage(baseText + clean)
-					editReq.SetEntities([]tg.MessageEntityClass{ent})
-				}
+			editReq.SetMessage(editText)
+			if len(entities) > 0 {
+				editReq.SetEntities(entities)
 			}
 			editReq.SetScheduleDate(schedule)
 			if _, err = api.MessagesEditMessage(ctx, &editReq); err != nil {
