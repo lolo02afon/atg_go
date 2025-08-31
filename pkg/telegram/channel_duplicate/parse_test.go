@@ -40,3 +40,19 @@ func TestParseTextURLContext(t *testing.T) {
 		t.Errorf("ожидался текст ' переходи в группу!', получено %q", clean)
 	}
 }
+
+// TestHasURL проверяет определение наличия URL в тексте.
+func TestHasURL(t *testing.T) {
+	tests := []struct {
+		text string
+		want bool
+	}{
+		{"без ссылки", false},
+		{"ссылка http://example.com", true},
+	}
+	for _, tt := range tests {
+		if hasURL(tt.text) != tt.want {
+			t.Errorf("для %q ожидалось %v", tt.text, tt.want)
+		}
+	}
+}
