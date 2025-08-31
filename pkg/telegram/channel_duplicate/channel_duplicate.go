@@ -120,9 +120,6 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 				// Удаляем указанный фрагмент
 				text = strings.ReplaceAll(text, *info.remove, "")
 				needsEdit = true
-			} else {
-				// Фрагмент для удаления не найден — просто логируем и продолжаем публикацию
-				log.Printf("[CHANNEL DUPLICATE] фрагмент '%s' не найден в сообщении %d", *info.remove, msg.ID)
 			}
 		}
 		// Сохраняем текст после удаления, чтобы знать смещение добавленного блока
@@ -175,7 +172,6 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 				}
 				return nil
 			}
-			log.Printf("[CHANNEL DUPLICATE] отложенное сообщение %d сохранено, редактирование", forwardedID)
 			editReq := tg.MessagesEditMessageRequest{
 				Peer: &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
 				ID:   forwardedID,
@@ -189,21 +185,15 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 				editReq.SetNoWebpage(true)
 			}
 			editReq.SetScheduleDate(schedule)
-			// Логируем процесс редактирования отложенного поста
-			log.Printf("[CHANNEL DUPLICATE] редактируем отложенное сообщение %d", forwardedID)
 			if _, err = api.MessagesEditMessage(ctx, &editReq); err != nil {
 				log.Printf("[CHANNEL DUPLICATE] редактирование сообщения %d: %v", forwardedID, err)
 				return nil
 			}
-			log.Printf("[CHANNEL DUPLICATE] отложенное сообщение %d отредактировано", forwardedID)
-			log.Printf("[CHANNEL DUPLICATE] публикация отложенного сообщения %d", forwardedID)
 			if _, err = api.MessagesSendScheduledMessages(ctx, &tg.MessagesSendScheduledMessagesRequest{
 				Peer: &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
 				ID:   []int{forwardedID},
 			}); err != nil {
 				log.Printf("[CHANNEL DUPLICATE] публикация отложенного сообщения %d: %v", forwardedID, err)
-			} else {
-				log.Printf("[CHANNEL DUPLICATE] отложенное сообщение %d опубликовано", forwardedID)
 			}
 			return nil
 		}
