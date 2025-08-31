@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"regexp"
 	"strings"
 	"time"
+	"unicode/utf16"
 
 	"atg_go/pkg/storage"
 	base "atg_go/pkg/telegram/module"
@@ -63,6 +65,29 @@ func forwardScheduled(ctx context.Context, api *tg.Client, donor *tg.Channel, ta
 		}
 	}
 	return 0, fmt.Errorf("ID отложенного сообщения не найден")
+}
+
+// utf16Len возвращает длину строки в кодовых единицах UTF-16.
+// Telegram измеряет смещения сущностей именно в этих единицах.
+func utf16Len(s string) int {
+	return len(utf16.Encode([]rune(s)))
+}
+
+// parseTextURL ищет в тексте ссылку формата [текст](url)
+// и возвращает сущность для Telegram и очищенный текст без служебных символов.
+func parseTextURL(text string, baseOffset int) (*tg.MessageEntityTextURL, string) {
+	markdown := regexp.MustCompile(`\[([^\]]+)\]\((https?://[^\s]+)\)`)
+	if loc := markdown.FindStringSubmatchIndex(text); loc != nil {
+		visible := text[loc[2]:loc[3]]
+		url := text[loc[4]:loc[5]]
+		// Смещения считаются в UTF-16, поэтому используем utf16Len
+		offset := baseOffset + utf16Len(text[:loc[2]])
+		length := utf16Len(visible)
+		clean := text[:loc[0]] + visible + text[loc[1]:]
+		ent := &tg.MessageEntityTextURL{Offset: offset, Length: length, URL: url}
+		return ent, clean
+	}
+	return nil, text
 }
 
 // Connect присоединяет модуль дублирования каналов к существующему клиенту Telegram.
@@ -137,9 +162,13 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 				return nil
 			}
 		}
+		// Сохраняем текст после удаления, чтобы знать смещение добавленного блока
+		baseText := text
+		var addText string
 		if info.add != nil && *info.add != "" {
 			// Добавляем текст в конец поста
-			text += *info.add
+			addText = *info.add
+			text = baseText + addText
 			needsEdit = true
 		}
 
@@ -154,11 +183,23 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 				}
 				return nil
 			}
+			editText := text
+			var entities []tg.MessageEntityClass
+			// Анализируем добавленный текст на наличие ссылки и формируем сущность
+			if addText != "" {
+				if ent, clean := parseTextURL(addText, utf16Len(baseText)); ent != nil {
+					editText = baseText + clean
+					entities = []tg.MessageEntityClass{ent}
+				}
+			}
 			editReq := tg.MessagesEditMessageRequest{
 				Peer: &tg.InputPeerChannel{ChannelID: info.target.ID, AccessHash: info.target.AccessHash},
 				ID:   forwardedID,
 			}
-			editReq.SetMessage(text)
+			editReq.SetMessage(editText)
+			if len(entities) > 0 {
+				editReq.SetEntities(entities)
+			}
 			editReq.SetScheduleDate(schedule)
 			if _, err = api.MessagesEditMessage(ctx, &editReq); err != nil {
 				log.Printf("[CHANNEL DUPLICATE] редактирование сообщения: %v", err)
