@@ -1,5 +1,7 @@
 package models
 
+import "encoding/json"
+
 // ChannelDuplicate описывает канал-источник, контент которого нужно дублировать
 // order_id - идентификатор заказа; при удалении заказа запись удаляется каскадно
 // url_channel_donor - ссылка на канал-источник
@@ -11,11 +13,12 @@ package models
 // Комментарии в коде на русском языке по требованию пользователя
 
 type ChannelDuplicate struct {
-	ID               int     `json:"id"`
-	OrderID          int     `json:"order_id"`           // ID связанного заказа
-	URLChannelDonor  string  `json:"url_channel_donor"`  // Ссылка на канал-источник
-	ChannelDonorTGID *string `json:"channel_donor_tgid"` // ID телеграм-канала источника
-	PostTextRemove   *string `json:"post_text_remove"`   // Текст для удаления
-	PostTextAdd      *string `json:"post_text_add"`      // Текст для добавления; ссылки: [текст](url)
-	LastPostID       *int    `json:"last_post_id"`       // ID последнего пересланного поста
+	ID               int             `json:"id"`
+	OrderID          int             `json:"order_id"`           // ID связанного заказа
+	URLChannelDonor  string          `json:"url_channel_donor"`  // Ссылка на канал-источник
+	ChannelDonorTGID *string         `json:"channel_donor_tgid"` // ID телеграм-канала источника
+	PostTextRemove   *string         `json:"post_text_remove"`   // Текст для удаления
+	PostTextAdd      *string         `json:"post_text_add"`      // Текст для добавления; ссылки: [текст](url)
+	PostSkip         json.RawMessage `json:"post_skip"`          // JSON с условиями пропуска постов
+	LastPostID       *int            `json:"last_post_id"`       // ID последнего пересланного поста
 }
