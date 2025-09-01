@@ -2,9 +2,12 @@ package channel_duplicate
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,6 +15,7 @@ import (
 	base "atg_go/pkg/telegram/module"
 
 	"github.com/gotd/td/tg"
+	"github.com/lib/pq"
 )
 
 // channelInfo хранит данные для пересылки сообщений.
@@ -319,59 +323,123 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 	})
 
 	for _, cd := range dups {
-		donorUser, err := base.Modf_ExtractUsername(cd.URLChannelDonor)
-		if err != nil {
-			log.Printf("[CHANNEL DUPLICATE] некорректная ссылка %s: %v", cd.URLChannelDonor, err)
-			continue
-		}
-		donorResolved, err := api.ContactsResolveUsername(ctx, &tg.ContactsResolveUsernameRequest{Username: donorUser})
-		if err != nil {
-			log.Printf("[CHANNEL DUPLICATE] не удалось получить канал %s: %v", cd.URLChannelDonor, err)
-			continue
-		}
-		donorCh, err := base.Modf_FindChannel(donorResolved.GetChats())
-		if err != nil {
-			log.Printf("[CHANNEL DUPLICATE] канал %s не найден: %v", cd.URLChannelDonor, err)
-			continue
-		}
-		if err := base.Modf_JoinChannel(ctx, api, donorCh, db, accountID); err != nil && !strings.Contains(err.Error(), "USER_ALREADY_PARTICIPANT") {
-			log.Printf("[CHANNEL DUPLICATE] подписка на %s: %v", cd.URLChannelDonor, err)
-			continue
-		}
-		settings := tg.InputPeerNotifySettings{}
-		settings.SetMuteUntil(0)
-		_, err = api.AccountUpdateNotifySettings(ctx, &tg.AccountUpdateNotifySettingsRequest{
-			Peer:     &tg.InputNotifyPeer{Peer: &tg.InputPeerChannel{ChannelID: donorCh.ID, AccessHash: donorCh.AccessHash}},
-			Settings: settings,
-		})
-		if err != nil {
-			log.Printf("[CHANNEL DUPLICATE] уведомления %s: %v", cd.URLChannelDonor, err)
-		}
-		if cd.ChannelDonorTGID == nil {
-			_ = db.SetChannelDonorTGID(cd.ID, fmt.Sprintf("%d", donorCh.ID))
-		}
+		registerDuplicate(ctx, api, db, accountID, cd, chMap)
+	}
 
-		targetUser, err := base.Modf_ExtractUsername(cd.OrderURL)
-		if err != nil {
-			log.Printf("[CHANNEL DUPLICATE] некорректная ссылка %s: %v", cd.OrderURL, err)
-			continue
+	// Запускаем слушатель событий БД для обновления списка каналов без перезапуска сервера
+	go listenChannelDuplicate(ctx, api, db, accountID, chMap)
+}
+
+// registerDuplicate добавляет канал-донор в карту для отслеживания и подписывается на необходимые каналы.
+func registerDuplicate(ctx context.Context, api *tg.Client, db *storage.DB, accountID int, cd storage.ChannelDuplicateOrder, chMap map[int64]channelInfo) {
+	donorUser, err := base.Modf_ExtractUsername(cd.URLChannelDonor)
+	if err != nil {
+		log.Printf("[CHANNEL DUPLICATE] некорректная ссылка %s: %v", cd.URLChannelDonor, err)
+		return
+	}
+	donorResolved, err := api.ContactsResolveUsername(ctx, &tg.ContactsResolveUsernameRequest{Username: donorUser})
+	if err != nil {
+		log.Printf("[CHANNEL DUPLICATE] не удалось получить канал %s: %v", cd.URLChannelDonor, err)
+		return
+	}
+	donorCh, err := base.Modf_FindChannel(donorResolved.GetChats())
+	if err != nil {
+		log.Printf("[CHANNEL DUPLICATE] канал %s не найден: %v", cd.URLChannelDonor, err)
+		return
+	}
+	if err := base.Modf_JoinChannel(ctx, api, donorCh, db, accountID); err != nil && !strings.Contains(err.Error(), "USER_ALREADY_PARTICIPANT") {
+		log.Printf("[CHANNEL DUPLICATE] подписка на %s: %v", cd.URLChannelDonor, err)
+		return
+	}
+	settings := tg.InputPeerNotifySettings{}
+	settings.SetMuteUntil(0)
+	_, err = api.AccountUpdateNotifySettings(ctx, &tg.AccountUpdateNotifySettingsRequest{
+		Peer:     &tg.InputNotifyPeer{Peer: &tg.InputPeerChannel{ChannelID: donorCh.ID, AccessHash: donorCh.AccessHash}},
+		Settings: settings,
+	})
+	if err != nil {
+		log.Printf("[CHANNEL DUPLICATE] уведомления %s: %v", cd.URLChannelDonor, err)
+	}
+	donorIDStr := fmt.Sprintf("%d", donorCh.ID)
+	if cd.ChannelDonorTGID == nil || *cd.ChannelDonorTGID != donorIDStr {
+		_ = db.SetChannelDonorTGID(cd.ID, donorIDStr)
+	}
+
+	targetUser, err := base.Modf_ExtractUsername(cd.OrderURL)
+	if err != nil {
+		log.Printf("[CHANNEL DUPLICATE] некорректная ссылка %s: %v", cd.OrderURL, err)
+		return
+	}
+	targetResolved, err := api.ContactsResolveUsername(ctx, &tg.ContactsResolveUsernameRequest{Username: targetUser})
+	if err != nil {
+		log.Printf("[CHANNEL DUPLICATE] не удалось получить канал %s: %v", cd.OrderURL, err)
+		return
+	}
+	targetCh, err := base.Modf_FindChannel(targetResolved.GetChats())
+	if err != nil {
+		log.Printf("[CHANNEL DUPLICATE] канал %s не найден: %v", cd.OrderURL, err)
+		return
+	}
+	if err := base.Modf_JoinChannel(ctx, api, targetCh, db, accountID); err != nil && !strings.Contains(err.Error(), "USER_ALREADY_PARTICIPANT") {
+		log.Printf("[CHANNEL DUPLICATE] подписка на %s: %v", cd.OrderURL, err)
+	}
+	targetIDStr := fmt.Sprintf("%d", targetCh.ID)
+	if cd.OrderChannelTGID == nil || *cd.OrderChannelTGID != targetIDStr {
+		_ = db.SetOrderChannelTGID(cd.OrderID, targetIDStr)
+	}
+
+	// Удаляем старую запись, если ID канала изменился
+	for key, info := range chMap {
+		if info.id == cd.ID {
+			delete(chMap, key)
+			break
 		}
-		targetResolved, err := api.ContactsResolveUsername(ctx, &tg.ContactsResolveUsernameRequest{Username: targetUser})
-		if err != nil {
-			log.Printf("[CHANNEL DUPLICATE] не удалось получить канал %s: %v", cd.OrderURL, err)
-			continue
+	}
+	chMap[donorCh.ID] = channelInfo{id: cd.ID, donor: donorCh, target: targetCh, remove: cd.PostTextRemove, add: cd.PostTextAdd}
+}
+
+// listenChannelDuplicate ожидает уведомления от PostgreSQL об изменениях в таблице channel_duplicate.
+func listenChannelDuplicate(ctx context.Context, api *tg.Client, db *storage.DB, accountID int, chMap map[int64]channelInfo) {
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		dsn = "postgres://postgres:postgres@localhost:5432/atg_db?sslmode=disable&application_name=atg_app"
+	}
+	listener := pq.NewListener(dsn, 10*time.Second, time.Minute, nil)
+	if err := listener.Listen("channel_duplicate_changed"); err != nil {
+		log.Printf("[CHANNEL DUPLICATE] подписка на уведомления: %v", err)
+		return
+	}
+	defer listener.Close()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case n := <-listener.Notify:
+			if n == nil {
+				continue
+			}
+			id, err := strconv.Atoi(n.Extra)
+			if err != nil {
+				log.Printf("[CHANNEL DUPLICATE] некорректный payload %q: %v", n.Extra, err)
+				continue
+			}
+			cd, err := db.GetChannelDuplicateOrderByID(id)
+			if err != nil {
+				if err == sql.ErrNoRows {
+					// Запись удалена — убираем её из карты
+					for key, info := range chMap {
+						if info.id == id {
+							delete(chMap, key)
+							break
+						}
+					}
+					continue
+				}
+				log.Printf("[CHANNEL DUPLICATE] получение записи %d: %v", id, err)
+				continue
+			}
+			registerDuplicate(ctx, api, db, accountID, *cd, chMap)
 		}
-		targetCh, err := base.Modf_FindChannel(targetResolved.GetChats())
-		if err != nil {
-			log.Printf("[CHANNEL DUPLICATE] канал %s не найден: %v", cd.OrderURL, err)
-			continue
-		}
-		if err := base.Modf_JoinChannel(ctx, api, targetCh, db, accountID); err != nil && !strings.Contains(err.Error(), "USER_ALREADY_PARTICIPANT") {
-			log.Printf("[CHANNEL DUPLICATE] подписка на %s: %v", cd.OrderURL, err)
-		}
-		if cd.OrderChannelTGID == nil {
-			_ = db.SetOrderChannelTGID(cd.OrderID, fmt.Sprintf("%d", targetCh.ID))
-		}
-		chMap[donorCh.ID] = channelInfo{id: cd.ID, donor: donorCh, target: targetCh, remove: cd.PostTextRemove, add: cd.PostTextAdd}
 	}
 }
