@@ -6,6 +6,43 @@ import (
 	"atg_go/models"
 )
 
+// rowScanner описывает минимальный набор методов для чтения строки.
+// Это позволяет переиспользовать функцию сканирования как с *sql.Rows,
+// так и с *sql.Row.
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+// scanChannelDuplicateOrder заполняет структуру ChannelDuplicateOrder из результата запроса.
+// Общая логика вынесена в отдельную функцию, чтобы избежать дублирования кода.
+func scanChannelDuplicateOrder(rs rowScanner) (ChannelDuplicateOrder, error) {
+	var cd ChannelDuplicateOrder
+	var (
+		donorTGID, postRemove, postAdd, orderTGID sql.NullString
+		lastPost                                  sql.NullInt64
+	)
+	if err := rs.Scan(&cd.ID, &cd.OrderID, &cd.URLChannelDonor, &donorTGID, &postRemove, &postAdd, &lastPost, &cd.OrderURL, &orderTGID); err != nil {
+		return cd, err
+	}
+	if donorTGID.Valid {
+		cd.ChannelDonorTGID = &donorTGID.String
+	}
+	if postRemove.Valid {
+		cd.PostTextRemove = &postRemove.String
+	}
+	if postAdd.Valid {
+		cd.PostTextAdd = &postAdd.String
+	}
+	if lastPost.Valid {
+		v := int(lastPost.Int64)
+		cd.LastPostID = &v
+	}
+	if orderTGID.Valid {
+		cd.OrderChannelTGID = &orderTGID.String
+	}
+	return cd, nil
+}
+
 // ChannelDuplicateOrder объединяет запись дублирования с адресом нашего канала.
 type ChannelDuplicateOrder struct {
 	models.ChannelDuplicate
@@ -28,29 +65,9 @@ func (db *DB) GetChannelDuplicates() ([]ChannelDuplicateOrder, error) {
 
 	var list []ChannelDuplicateOrder
 	for rows.Next() {
-		var cd ChannelDuplicateOrder
-		var (
-			donorTGID, postRemove, postAdd, orderTGID sql.NullString
-			lastPost                                  sql.NullInt64
-		)
-		if err := rows.Scan(&cd.ID, &cd.OrderID, &cd.URLChannelDonor, &donorTGID, &postRemove, &postAdd, &lastPost, &cd.OrderURL, &orderTGID); err != nil {
+		cd, err := scanChannelDuplicateOrder(rows)
+		if err != nil {
 			return nil, err
-		}
-		if donorTGID.Valid {
-			cd.ChannelDonorTGID = &donorTGID.String
-		}
-		if postRemove.Valid {
-			cd.PostTextRemove = &postRemove.String
-		}
-		if postAdd.Valid {
-			cd.PostTextAdd = &postAdd.String
-		}
-		if lastPost.Valid {
-			v := int(lastPost.Int64)
-			cd.LastPostID = &v
-		}
-		if orderTGID.Valid {
-			cd.OrderChannelTGID = &orderTGID.String
 		}
 		list = append(list, cd)
 	}
@@ -58,6 +75,21 @@ func (db *DB) GetChannelDuplicates() ([]ChannelDuplicateOrder, error) {
 		return nil, err
 	}
 	return list, nil
+}
+
+// GetChannelDuplicateOrderByID возвращает запись дублирования с привязанным заказом по её ID.
+func (db *DB) GetChannelDuplicateOrderByID(id int) (*ChannelDuplicateOrder, error) {
+	row := db.Conn.QueryRow(`
+                SELECT cd.id, cd.order_id, cd.url_channel_donor, cd.channel_donor_tgid, cd.post_text_remove, cd.post_text_add, cd.last_post_id,
+                       o.url_default, o.channel_tgid
+                FROM channel_duplicate cd
+                JOIN orders o ON cd.order_id = o.id
+                WHERE cd.id = $1`, id)
+	cd, err := scanChannelDuplicateOrder(row)
+	if err != nil {
+		return nil, err
+	}
+	return &cd, nil
 }
 
 // GetChannelDonorURLs возвращает список ссылок на каналы-доноры.
