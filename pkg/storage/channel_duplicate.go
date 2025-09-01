@@ -20,9 +20,9 @@ func scanChannelDuplicateOrder(rs rowScanner) (ChannelDuplicateOrder, error) {
 	var (
 		donorTGID, postRemove, postAdd, orderTGID sql.NullString
 		postSkip                                  []byte // JSON с условиями пропуска постов
-		lastPost                                  sql.NullInt64
+		lastPost, daysAgo                         sql.NullInt64
 	)
-	if err := rs.Scan(&cd.ID, &cd.OrderID, &cd.URLChannelDonor, &donorTGID, &postRemove, &postAdd, &postSkip, &lastPost, &cd.OrderURL, &orderTGID); err != nil {
+	if err := rs.Scan(&cd.ID, &cd.OrderID, &cd.URLChannelDonor, &donorTGID, &postRemove, &postAdd, &postSkip, &lastPost, &daysAgo, &cd.OrderURL, &orderTGID); err != nil {
 		return cd, err
 	}
 	if donorTGID.Valid {
@@ -38,6 +38,10 @@ func scanChannelDuplicateOrder(rs rowScanner) (ChannelDuplicateOrder, error) {
 	if lastPost.Valid {
 		v := int(lastPost.Int64)
 		cd.LastPostID = &v
+	}
+	if daysAgo.Valid {
+		v := int(daysAgo.Int64)
+		cd.DaysAgo = &v
 	}
 	if orderTGID.Valid {
 		cd.OrderChannelTGID = &orderTGID.String
@@ -55,7 +59,7 @@ type ChannelDuplicateOrder struct {
 // GetChannelDuplicates возвращает список каналов-источников и связанные с ними заказы.
 func (db *DB) GetChannelDuplicates() ([]ChannelDuplicateOrder, error) {
 	rows, err := db.Conn.Query(`
-                SELECT cd.id, cd.order_id, cd.url_channel_donor, cd.channel_donor_tgid, cd.post_text_remove, cd.post_text_add, cd.post_skip, cd.last_post_id,
+                SELECT cd.id, cd.order_id, cd.url_channel_donor, cd.channel_donor_tgid, cd.post_text_remove, cd.post_text_add, cd.post_skip, cd.last_post_id, cd.days_ago,
                        o.url_default, o.channel_tgid
                 FROM channel_duplicate cd
                 JOIN orders o ON cd.order_id = o.id
@@ -82,7 +86,7 @@ func (db *DB) GetChannelDuplicates() ([]ChannelDuplicateOrder, error) {
 // GetChannelDuplicateOrderByID возвращает запись дублирования с привязанным заказом по её ID.
 func (db *DB) GetChannelDuplicateOrderByID(id int) (*ChannelDuplicateOrder, error) {
 	row := db.Conn.QueryRow(`
-                SELECT cd.id, cd.order_id, cd.url_channel_donor, cd.channel_donor_tgid, cd.post_text_remove, cd.post_text_add, cd.post_skip, cd.last_post_id,
+                SELECT cd.id, cd.order_id, cd.url_channel_donor, cd.channel_donor_tgid, cd.post_text_remove, cd.post_text_add, cd.post_skip, cd.last_post_id, cd.days_ago,
                        o.url_default, o.channel_tgid
                 FROM channel_duplicate cd
                 JOIN orders o ON cd.order_id = o.id
