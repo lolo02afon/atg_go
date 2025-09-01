@@ -233,9 +233,10 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 		log.Printf("[CHANNEL DUPLICATE] получение списка дубликатов: %v", err)
 		return
 	}
+
 	if len(dups) == 0 {
+		// Даже если пока нет записей, запускаем обработчик и слушатель
 		log.Printf("[CHANNEL DUPLICATE] нет каналов для дублирования")
-		return
 	}
 
 	chMap := make(map[int64]channelInfo)
