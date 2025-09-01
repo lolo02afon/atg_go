@@ -25,6 +25,7 @@ type channelInfo struct {
 	target *tg.Channel // Наш канал
 	remove *string     // Текст для удаления из поста
 	add    *string     // Текст для добавления
+	skip   postSkip    // Условия пропуска постов
 }
 
 // copyMessage публикует копию сообщения в целевом канале.
@@ -270,6 +271,10 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 		if isAdvertisement(msg) {
 			return nil
 		}
+		// Проверяем условия пропуска постов
+		if shouldSkip(msg, info.skip) {
+			return nil
+		}
 
 		// Определяем, нужно ли публиковать сообщение как ответ
 		var replyTo *int
@@ -396,7 +401,14 @@ func registerDuplicate(ctx context.Context, api *tg.Client, db *storage.DB, acco
 			break
 		}
 	}
-	chMap[donorCh.ID] = channelInfo{id: cd.ID, donor: donorCh, target: targetCh, remove: cd.PostTextRemove, add: cd.PostTextAdd}
+	chMap[donorCh.ID] = channelInfo{
+		id:     cd.ID,
+		donor:  donorCh,
+		target: targetCh,
+		remove: cd.PostTextRemove,
+		add:    cd.PostTextAdd,
+		skip:   parsePostSkip(cd.PostSkip),
+	}
 }
 
 // listenChannelDuplicate ожидает уведомления от PostgreSQL об изменениях в таблице channel_duplicate.
