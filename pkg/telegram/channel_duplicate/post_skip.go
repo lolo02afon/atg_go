@@ -25,6 +25,13 @@ func parsePostSkip(data []byte) postSkip {
 	if err := json.Unmarshal(data, &ps); err != nil {
 		return postSkip{}
 	}
+	// Нормализуем строки к нижнему регистру, чтобы сравнения не зависели от регистра.
+	for i, t := range ps.Text {
+		ps.Text[i] = strings.ToLower(t)
+	}
+	for i, u := range ps.URL {
+		ps.URL[i] = strings.ToLower(u)
+	}
 	return ps
 }
 
@@ -36,7 +43,7 @@ func shouldSkip(msg *tg.Message, ps postSkip) bool {
 		if t == "" {
 			continue
 		}
-		if strings.Contains(lowerText, strings.ToLower(t)) {
+		if strings.Contains(lowerText, t) {
 			return true
 		}
 	}
@@ -50,7 +57,7 @@ func shouldSkip(msg *tg.Message, ps postSkip) bool {
 			if u == "" {
 				continue
 			}
-			if strings.Contains(l, strings.ToLower(u)) {
+			if strings.Contains(l, u) {
 				return true
 			}
 		}
