@@ -26,6 +26,8 @@ type channelInfo struct {
 	remove *string     // Текст для удаления из поста
 	add    *string     // Текст для добавления
 	skip   postSkip    // Условия пропуска постов
+	lastID *int        // ID последнего обработанного поста
+	perDay *int        // Количество публикаций в день
 }
 
 // copyMessage публикует копию сообщения в целевом канале.
@@ -226,6 +228,64 @@ func extractFirstMessage(res tg.MessagesMessagesClass) *tg.Message {
 	return nil
 }
 
+// processMessage подготавливает текст и публикует сообщение в целевом канале.
+// Все проверки и модификации текста объединены здесь, чтобы избежать дублирования кода.
+func processMessage(ctx context.Context, api *tg.Client, info channelInfo, msg *tg.Message) error {
+	// Пропускаем рекламу
+	if isAdvertisement(msg) {
+		return nil
+	}
+	// Проверяем условия пропуска
+	if shouldSkip(msg, info.skip) {
+		return nil
+	}
+
+	// Подбираем сообщение для ответа
+	var replyTo *int
+	if id, err := findReplyTarget(ctx, api, info.donor, info.target, msg); err != nil {
+		log.Printf("[CHANNEL DUPLICATE] поиск сообщения для ответа: %v", err)
+	} else if id != 0 {
+		replyTo = &id
+	}
+
+	// Проверяем наличие предпросмотра ссылки
+	_, hasPreview := msg.Media.(*tg.MessageMediaWebPage)
+
+	// Исходный текст и сущности
+	text := msg.Message
+	entities := msg.Entities
+
+	// Удаляем указанный фрагмент
+	if info.remove != nil && *info.remove != "" {
+		if strings.Contains(text, *info.remove) {
+			text = strings.ReplaceAll(text, *info.remove, "")
+			entities = adjustEntitiesAfterRemoval(entities, msg.Message, *info.remove)
+		}
+	}
+
+	baseText := text
+	linkDetected := !hasPreview && hasURL(baseText)
+
+	// Добавляем текст в конец поста
+	if info.add != nil && *info.add != "" && !hasPreview {
+		addText := *info.add
+		if ent, clean := parseTextURL(addText, utf16Len(baseText)); ent != nil {
+			text = baseText + clean
+			entities = append(entities, ent)
+			linkDetected = true
+		} else {
+			text = baseText + addText
+			if hasURL(addText) {
+				linkDetected = true
+			}
+		}
+	}
+
+	disablePreview := linkDetected
+
+	return copyMessage(ctx, api, info.donor, info.target, msg, text, entities, disablePreview, replyTo)
+}
+
 // Connect присоединяет модуль дублирования каналов к существующему клиенту Telegram.
 // Модуль использует уже готовые api и диспетчер, не открывая сессию повторно.
 func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatcher, db *storage.DB, accountID int) {
@@ -263,63 +323,13 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 		if !updated {
 			return nil
 		}
-		// Обновляем тексты в карте, чтобы использовать свежие значения
+		// Обновляем данные в карте
 		info.remove = remove
 		info.add = add
+		info.lastID = &msg.ID
 		chMap[peer.ChannelID] = info
-		// Перед пересылкой проверяем пост на признаки рекламы
-		if isAdvertisement(msg) {
-			return nil
-		}
-		// Проверяем условия пропуска постов
-		if shouldSkip(msg, info.skip) {
-			return nil
-		}
 
-		// Определяем, нужно ли публиковать сообщение как ответ
-		var replyTo *int
-		if id, err := findReplyTarget(ctx, api, info.donor, info.target, msg); err != nil {
-			log.Printf("[CHANNEL DUPLICATE] поиск сообщения для ответа: %v", err)
-		} else if id != 0 {
-			replyTo = &id
-		}
-
-		// Проверяем, есть ли в исходном сообщении предпросмотр ссылки
-		_, hasPreview := msg.Media.(*tg.MessageMediaWebPage)
-
-		// Исходный текст и сущности
-		text := msg.Message
-		entities := msg.Entities
-
-		// Удаляем указанный фрагмент из текста
-		if info.remove != nil && *info.remove != "" {
-			if strings.Contains(text, *info.remove) {
-				text = strings.ReplaceAll(text, *info.remove, "")
-				entities = adjustEntitiesAfterRemoval(entities, msg.Message, *info.remove)
-			}
-		}
-
-		baseText := text
-		linkDetected := !hasPreview && hasURL(baseText)
-
-		// Добавляем текст в конец поста, если это разрешено
-		if info.add != nil && *info.add != "" && !hasPreview {
-			addText := *info.add
-			if ent, clean := parseTextURL(addText, utf16Len(baseText)); ent != nil {
-				text = baseText + clean
-				entities = append(entities, ent)
-				linkDetected = true
-			} else {
-				text = baseText + addText
-				if hasURL(addText) {
-					linkDetected = true
-				}
-			}
-		}
-
-		disablePreview := linkDetected
-
-		if err := copyMessage(ctx, api, info.donor, info.target, msg, text, entities, disablePreview, replyTo); err != nil {
+		if err := processMessage(ctx, api, info, msg); err != nil {
 			saveErr := db.SaveSos(fmt.Sprintf("не удалось скопировать пост %d с канала %d: %v", msg.ID, info.donor.ID, err))
 			if saveErr != nil {
 				log.Printf("[CHANNEL DUPLICATE] ошибка записи в Sos: %v", saveErr)
@@ -408,6 +418,83 @@ func registerDuplicate(ctx context.Context, api *tg.Client, db *storage.DB, acco
 		remove: cd.PostTextRemove,
 		add:    cd.PostTextAdd,
 		skip:   parsePostSkip(cd.PostSkip),
+		lastID: cd.LastPostID,
+		perDay: cd.PostCountDay,
+	}
+
+	if cd.LastPostID != nil && cd.PostCountDay != nil {
+		go postFromHistory(ctx, api, db, donorCh.ID, chMap)
+	}
+}
+
+// postFromHistory публикует ограниченное число постов из истории донорского канала.
+// Посты берутся, начиная со следующего после указанного в last_post_id, и публикуются по порядку.
+func postFromHistory(ctx context.Context, api *tg.Client, db *storage.DB, donorID int64, chMap map[int64]channelInfo) {
+	info, ok := chMap[donorID]
+	if !ok {
+		return
+	}
+	if info.lastID == nil || info.perDay == nil {
+		return
+	}
+	currentID := *info.lastID
+	for sent := 0; sent < *info.perDay; {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		currentID++
+		res, err := api.ChannelsGetMessages(ctx, &tg.ChannelsGetMessagesRequest{
+			Channel: &tg.InputChannel{ChannelID: info.donor.ID, AccessHash: info.donor.AccessHash},
+			ID:      []tg.InputMessageClass{&tg.InputMessageID{ID: currentID}},
+		})
+		if err != nil {
+			log.Printf("[CHANNEL DUPLICATE] получение поста %d: %v", currentID, err)
+			return
+		}
+
+		var msg *tg.Message
+		switch m := res.(type) {
+		case *tg.MessagesChannelMessages:
+			if len(m.Messages) > 0 {
+				if mm, ok := m.Messages[0].(*tg.Message); ok {
+					msg = mm
+				}
+			}
+		case *tg.MessagesMessages:
+			if len(m.Messages) > 0 {
+				if mm, ok := m.Messages[0].(*tg.Message); ok {
+					msg = mm
+				}
+			}
+		}
+		if msg == nil {
+			continue
+		}
+
+		updated, remove, add, err := db.TrySetLastPostID(info.id, msg.ID)
+		if err != nil {
+			log.Printf("[CHANNEL DUPLICATE] обновление last_post_id: %v", err)
+			return
+		}
+		if !updated {
+			info.lastID = &msg.ID
+			chMap[donorID] = info
+			continue
+		}
+		info.remove = remove
+		info.add = add
+		info.lastID = &msg.ID
+		chMap[donorID] = info
+
+		if err := processMessage(ctx, api, info, msg); err != nil {
+			saveErr := db.SaveSos(fmt.Sprintf("не удалось скопировать пост %d с канала %d: %v", msg.ID, info.donor.ID, err))
+			if saveErr != nil {
+				log.Printf("[CHANNEL DUPLICATE] ошибка записи в Sos: %v", saveErr)
+			}
+		}
+		sent++
 	}
 }
 
