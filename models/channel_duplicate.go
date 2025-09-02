@@ -1,6 +1,10 @@
 package models
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/lib/pq"
+)
 
 // ChannelDuplicate описывает канал-источник, контент которого нужно дублировать
 // order_id - идентификатор заказа; при удалении заказа запись удаляется каскадно
@@ -21,5 +25,5 @@ type ChannelDuplicate struct {
 	PostTextAdd      *string         `json:"post_text_add"`      // Текст для добавления; ссылки: [текст](url)
 	PostSkip         json.RawMessage `json:"post_skip"`          // Условия пропуска: {"text":[], "url":[]}
 	LastPostID       *int            `json:"last_post_id"`       // ID последнего пересланного поста
-	PostCountDay     *int            `json:"post_count_day"`     // Число публикаций в день
+	PostCountDay     pq.StringArray  `json:"post_count_day"`     // Времена публикаций в формате HH:MM
 }
