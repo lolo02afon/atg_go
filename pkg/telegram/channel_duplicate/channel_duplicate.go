@@ -20,14 +20,14 @@ import (
 
 // channelInfo хранит данные для пересылки сообщений.
 type channelInfo struct {
-	id     int         // ID записи channel_duplicate
-	donor  *tg.Channel // Канал-источник
-	target *tg.Channel // Наш канал
-	remove *string     // Текст для удаления из поста
-	add    *string     // Текст для добавления
-	skip   postSkip    // Условия пропуска постов
-	lastID *int        // ID последнего обработанного поста
-	perDay *int        // Количество публикаций в день
+	id     int            // ID записи channel_duplicate
+	donor  *tg.Channel    // Канал-источник
+	target *tg.Channel    // Наш канал
+	remove *string        // Текст для удаления из поста
+	add    *string        // Текст для добавления
+	skip   postSkip       // Условия пропуска постов
+	lastID *int           // ID последнего обработанного поста
+	times  pq.StringArray // Времена публикаций в формате HH:MM
 }
 
 // copyMessage публикует копию сообщения в целевом канале.
@@ -419,10 +419,10 @@ func registerDuplicate(ctx context.Context, api *tg.Client, db *storage.DB, acco
 		add:    cd.PostTextAdd,
 		skip:   parsePostSkip(cd.PostSkip),
 		lastID: cd.LastPostID,
-		perDay: cd.PostCountDay,
+		times:  cd.PostCountDay,
 	}
 
-	if cd.LastPostID != nil && cd.PostCountDay != nil {
+	if cd.LastPostID != nil && len(cd.PostCountDay) > 0 {
 		go postFromHistory(ctx, api, db, donorCh.ID, chMap)
 	}
 }
@@ -434,11 +434,11 @@ func postFromHistory(ctx context.Context, api *tg.Client, db *storage.DB, donorI
 	if !ok {
 		return
 	}
-	if info.lastID == nil || info.perDay == nil {
+	if info.lastID == nil || len(info.times) == 0 {
 		return
 	}
 	currentID := *info.lastID
-	for sent := 0; sent < *info.perDay; {
+	for sent := 0; sent < len(info.times); {
 		select {
 		case <-ctx.Done():
 			return

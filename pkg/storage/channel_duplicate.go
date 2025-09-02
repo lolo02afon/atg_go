@@ -4,6 +4,7 @@ import (
 	"database/sql"
 
 	"atg_go/models"
+	"github.com/lib/pq"
 )
 
 // rowScanner описывает минимальный набор методов для чтения строки.
@@ -20,9 +21,10 @@ func scanChannelDuplicateOrder(rs rowScanner) (ChannelDuplicateOrder, error) {
 	var (
 		donorTGID, postRemove, postAdd, orderTGID sql.NullString
 		postSkip                                  []byte // JSON с условиями пропуска постов
-		lastPost, postCountDay                    sql.NullInt64
+		lastPost                                  sql.NullInt64
+		postCountDay                              pq.StringArray
 	)
-	if err := rs.Scan(&cd.ID, &cd.OrderID, &cd.URLChannelDonor, &donorTGID, &postRemove, &postAdd, &postSkip, &lastPost, &postCountDay, &cd.OrderURL, &orderTGID); err != nil {
+	if err := rs.Scan(&cd.ID, &cd.OrderID, &cd.URLChannelDonor, &donorTGID, &postRemove, &postAdd, &postSkip, &lastPost, pq.Array(&postCountDay), &cd.OrderURL, &orderTGID); err != nil {
 		return cd, err
 	}
 	if donorTGID.Valid {
@@ -39,10 +41,7 @@ func scanChannelDuplicateOrder(rs rowScanner) (ChannelDuplicateOrder, error) {
 		v := int(lastPost.Int64)
 		cd.LastPostID = &v
 	}
-	if postCountDay.Valid {
-		v := int(postCountDay.Int64)
-		cd.PostCountDay = &v
-	}
+	cd.PostCountDay = postCountDay
 	if orderTGID.Valid {
 		cd.OrderChannelTGID = &orderTGID.String
 	}
