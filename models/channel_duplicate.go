@@ -21,4 +21,5 @@ type ChannelDuplicate struct {
 	PostTextAdd      *string         `json:"post_text_add"`      // Текст для добавления; ссылки: [текст](url)
 	PostSkip         json.RawMessage `json:"post_skip"`          // Условия пропуска: {"text":[], "url":[]}
 	LastPostID       *int            `json:"last_post_id"`       // ID последнего пересланного поста
+	DaysAgo          *int            `json:"days_ago"`           // Количество дней; NULL если не задано
 }
