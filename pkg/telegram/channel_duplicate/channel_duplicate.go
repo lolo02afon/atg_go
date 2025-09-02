@@ -427,8 +427,8 @@ func registerDuplicate(ctx context.Context, api *tg.Client, db *storage.DB, acco
 	}
 }
 
-// postFromHistory публикует ограниченное число постов из истории донорского канала.
-// Посты берутся, начиная со следующего после указанного в last_post_id, и публикуются по порядку.
+// postFromHistory планирует публикации постов из истории донорского канала по указанным времени.
+// Для каждого времени создаётся отдельная горутина, которая раз в сутки публикует следующий пост.
 func postFromHistory(ctx context.Context, api *tg.Client, db *storage.DB, donorID int64, chMap map[int64]channelInfo) {
 	info, ok := chMap[donorID]
 	if !ok {
@@ -437,13 +437,46 @@ func postFromHistory(ctx context.Context, api *tg.Client, db *storage.DB, donorI
 	if info.lastID == nil || len(info.times) == 0 {
 		return
 	}
-	currentID := *info.lastID
-	for sent := 0; sent < len(info.times); {
-		select {
-		case <-ctx.Done():
-			return
-		default:
+
+	for _, tStr := range info.times {
+		parsed, err := time.Parse("15:04", tStr)
+		if err != nil {
+			continue
 		}
+		hour, minute := parsed.Hour(), parsed.Minute()
+
+		// Запускаем отдельную горутину для каждого времени публикации
+		go func(h, m int) {
+			for {
+				now := time.Now()
+				next := time.Date(now.Year(), now.Month(), now.Day(), h, m, 0, 0, now.Location())
+				if !next.After(now) {
+					next = next.Add(24 * time.Hour)
+				}
+
+				timer := time.NewTimer(next.Sub(now))
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					return
+				case <-timer.C:
+					publishNextFromHistory(ctx, api, db, donorID, chMap)
+				}
+			}
+		}(hour, minute)
+	}
+}
+
+// publishNextFromHistory берёт следующий пост после last_post_id и публикует его в целевой канал.
+func publishNextFromHistory(ctx context.Context, api *tg.Client, db *storage.DB, donorID int64, chMap map[int64]channelInfo) {
+	info, ok := chMap[donorID]
+	if !ok || info.lastID == nil {
+		return
+	}
+
+	currentID := *info.lastID
+	// Ограничиваем число попыток, чтобы не попасть в бесконечный цикл при пропущенных ID
+	for attempts := 0; attempts < 10; attempts++ {
 		currentID++
 		res, err := api.ChannelsGetMessages(ctx, &tg.ChannelsGetMessagesRequest{
 			Channel: &tg.InputChannel{ChannelID: info.donor.ID, AccessHash: info.donor.AccessHash},
@@ -478,14 +511,14 @@ func postFromHistory(ctx context.Context, api *tg.Client, db *storage.DB, donorI
 			log.Printf("[CHANNEL DUPLICATE] обновление last_post_id: %v", err)
 			return
 		}
+
+		info.lastID = &msg.ID
+		chMap[donorID] = info
 		if !updated {
-			info.lastID = &msg.ID
-			chMap[donorID] = info
 			continue
 		}
 		info.remove = remove
 		info.add = add
-		info.lastID = &msg.ID
 		chMap[donorID] = info
 
 		if err := processMessage(ctx, api, info, msg); err != nil {
@@ -494,7 +527,7 @@ func postFromHistory(ctx context.Context, api *tg.Client, db *storage.DB, donorI
 				log.Printf("[CHANNEL DUPLICATE] ошибка записи в Sos: %v", saveErr)
 			}
 		}
-		sent++
+		break
 	}
 }
 
