@@ -152,3 +152,12 @@ func (db *DB) TrySetLastPostID(id int, postID int) (updated bool, remove *string
 	}
 	return true, remove, add, nil
 }
+
+// UpdateChannelDuplicateTimes обновляет расписание публикаций (post_count_day) для записи channel_duplicate.
+func (db *DB) UpdateChannelDuplicateTimes(id int, times pq.StringArray) error {
+	_, err := db.Conn.Exec(
+		`UPDATE channel_duplicate SET post_count_day = $1 WHERE id = $2`,
+		pq.Array(times), id,
+	)
+	return err
+}
