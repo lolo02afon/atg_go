@@ -423,6 +423,8 @@ func registerDuplicate(ctx context.Context, api *tg.Client, db *storage.DB, acco
 	}
 
 	if cd.LastPostID != nil && len(cd.PostCountDay) > 0 {
+		// Фиксируем запуск публикации из истории по расписанию
+		log.Printf("[CHANNEL DUPLICATE] обнаружены last_post_id %d и расписание %v для канала %d", *cd.LastPostID, cd.PostCountDay, donorCh.ID)
 		go postFromHistory(ctx, api, db, donorCh.ID, chMap)
 	}
 }
@@ -432,21 +434,32 @@ func registerDuplicate(ctx context.Context, api *tg.Client, db *storage.DB, acco
 func postFromHistory(ctx context.Context, api *tg.Client, db *storage.DB, donorID int64, chMap map[int64]channelInfo) {
 	info, ok := chMap[donorID]
 	if !ok {
+		log.Printf("[CHANNEL DUPLICATE] канал %d не найден для запуска публикации из истории", donorID)
 		return
 	}
-	if info.lastID == nil || len(info.times) == 0 {
+	if info.lastID == nil {
+		log.Printf("[CHANNEL DUPLICATE] для канала %d отсутствует last_post_id", donorID)
+		return
+	}
+	if len(info.times) == 0 {
+		log.Printf("[CHANNEL DUPLICATE] для канала %d не заданы времена публикации", donorID)
 		return
 	}
 
+	log.Printf("[CHANNEL DUPLICATE] запуск таймеров для канала %d: %v", donorID, info.times)
+
 	for _, tStr := range info.times {
+		tStr = strings.TrimSpace(tStr)
 		parsed, err := time.Parse("15:04", tStr)
 		if err != nil {
+			log.Printf("[CHANNEL DUPLICATE] неверный формат времени %q для канала %d: %v", tStr, donorID, err)
 			continue
 		}
 		hour, minute := parsed.Hour(), parsed.Minute()
+		log.Printf("[CHANNEL DUPLICATE] планируем публикацию в %02d:%02d для канала %d", hour, minute, donorID)
 
 		// Запускаем отдельную горутину для каждого времени публикации
-		go func(h, m int) {
+		go func(h, m int, original string) {
 			for {
 				now := time.Now()
 				next := time.Date(now.Year(), now.Month(), now.Day(), h, m, 0, 0, now.Location())
@@ -454,30 +467,40 @@ func postFromHistory(ctx context.Context, api *tg.Client, db *storage.DB, donorI
 					next = next.Add(24 * time.Hour)
 				}
 
+				log.Printf("[CHANNEL DUPLICATE] ожидание до %s для канала %d (%s)", next.Format(time.RFC3339), donorID, original)
 				timer := time.NewTimer(next.Sub(now))
 				select {
 				case <-ctx.Done():
+					log.Printf("[CHANNEL DUPLICATE] остановка таймера для канала %d (%s)", donorID, original)
 					timer.Stop()
 					return
 				case <-timer.C:
+					log.Printf("[CHANNEL DUPLICATE] наступило время %s для канала %d", next.Format("15:04"), donorID)
 					publishNextFromHistory(ctx, api, db, donorID, chMap)
 				}
 			}
-		}(hour, minute)
+		}(hour, minute, tStr)
 	}
 }
 
 // publishNextFromHistory берёт следующий пост после last_post_id и публикует его в целевой канал.
 func publishNextFromHistory(ctx context.Context, api *tg.Client, db *storage.DB, donorID int64, chMap map[int64]channelInfo) {
 	info, ok := chMap[donorID]
-	if !ok || info.lastID == nil {
+	if !ok {
+		log.Printf("[CHANNEL DUPLICATE] нет информации о канале %d при публикации из истории", donorID)
+		return
+	}
+	if info.lastID == nil {
+		log.Printf("[CHANNEL DUPLICATE] отсутствует last_post_id для канала %d", donorID)
 		return
 	}
 
 	currentID := *info.lastID
+	log.Printf("[CHANNEL DUPLICATE] публикация следующего поста после %d для канала %d", currentID, donorID)
 	// Ограничиваем число попыток, чтобы не попасть в бесконечный цикл при пропущенных ID
 	for attempts := 0; attempts < 10; attempts++ {
 		currentID++
+		log.Printf("[CHANNEL DUPLICATE] попытка %d: ищем пост %d для канала %d", attempts+1, currentID, donorID)
 		res, err := api.ChannelsGetMessages(ctx, &tg.ChannelsGetMessagesRequest{
 			Channel: &tg.InputChannel{ChannelID: info.donor.ID, AccessHash: info.donor.AccessHash},
 			ID:      []tg.InputMessageClass{&tg.InputMessageID{ID: currentID}},
@@ -503,6 +526,7 @@ func publishNextFromHistory(ctx context.Context, api *tg.Client, db *storage.DB,
 			}
 		}
 		if msg == nil {
+			log.Printf("[CHANNEL DUPLICATE] пост %d не найден в канале %d", currentID, donorID)
 			continue
 		}
 
@@ -515,6 +539,7 @@ func publishNextFromHistory(ctx context.Context, api *tg.Client, db *storage.DB,
 		info.lastID = &msg.ID
 		chMap[donorID] = info
 		if !updated {
+			log.Printf("[CHANNEL DUPLICATE] пост %d уже был опубликован для канала %d", msg.ID, donorID)
 			continue
 		}
 		info.remove = remove
@@ -526,6 +551,8 @@ func publishNextFromHistory(ctx context.Context, api *tg.Client, db *storage.DB,
 			if saveErr != nil {
 				log.Printf("[CHANNEL DUPLICATE] ошибка записи в Sos: %v", saveErr)
 			}
+		} else {
+			log.Printf("[CHANNEL DUPLICATE] опубликован пост %d для канала %d", msg.ID, donorID)
 		}
 		break
 	}
