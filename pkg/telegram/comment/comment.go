@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"strings"
 	"time"
 
 	"atg_go/models"
@@ -65,17 +66,28 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 			Username: username,
 		})
 		if err != nil {
+			// При отсутствии канала фиксируем факт в таблице category_channels_delete
+			if strings.Contains(err.Error(), "USERNAME_NOT_OCCUPIED") {
+				_ = db.SaveCategoryChannelDelete(channelURL, models.ReasonChannelMissing)
+			}
 			return fmt.Errorf("не удалось распознать канал: %w", err)
 		}
 
 		// Находим канал среди полученных чатов
 		channel, err := module.Modf_FindChannel(resolved.GetChats())
 		if err != nil {
+			// Канал не найден в результатах — сохраняем запись об удалении
+			_ = db.SaveCategoryChannelDelete(channelURL, models.ReasonChannelMissing)
 			return err
 		}
 
 		// Подписываемся на сам канал, чтобы получить доступ к дискуссии
 		if errJoinChannel := module.Modf_JoinChannel(ctx, api, channel, db, accountID); errJoinChannel != nil {
+			// Закрытый канал недоступен
+			if tg.IsChannelPrivate(errJoinChannel) || strings.Contains(errJoinChannel.Error(), "CHANNEL_PRIVATE") {
+				_ = db.SaveCategoryChannelDelete(channelURL, models.ReasonChannelClosed)
+				return errJoinChannel
+			}
 			log.Printf("[ERROR] Не удалось вступить в канал: ID=%d AccessHash=%d Ошибка=%v",
 				channel.ID, channel.AccessHash, errJoinChannel)
 		}
@@ -128,6 +140,16 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 
 			discussionData, err := module.Modf_getPostDiscussion(ctx, api, channel, p.ID)
 			if err != nil {
+				// Если у канала нет обсуждений, фиксируем это и прерываем обработку
+				if strings.Contains(err.Error(), "discussion chat not found") {
+					_ = db.SaveCategoryChannelDelete(channelURL, models.ReasonDiscussionClosed)
+					return err
+				}
+				// Закрытый канал тоже фиксируется
+				if strings.Contains(err.Error(), "CHANNEL_PRIVATE") {
+					_ = db.SaveCategoryChannelDelete(channelURL, models.ReasonChannelClosed)
+					return err
+				}
 				continue
 			}
 

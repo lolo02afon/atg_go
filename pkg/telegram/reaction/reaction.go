@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"strings"
 	"time"
 
 	"atg_go/models"
@@ -58,28 +59,46 @@ func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID
 
 		resolved, err := api.ContactsResolveUsername(ctx, &tg.ContactsResolveUsernameRequest{Username: username})
 		if err != nil {
+			if strings.Contains(err.Error(), "USERNAME_NOT_OCCUPIED") {
+				_ = db.SaveCategoryChannelDelete(channelURL, models.ReasonChannelMissing)
+			}
 			return fmt.Errorf("не удалось распознать канал: %w", err)
 		}
 
 		// Находим сам канал по username
 		channel, err := module.Modf_FindChannel(resolved.GetChats())
 		if err != nil {
+			_ = db.SaveCategoryChannelDelete(channelURL, models.ReasonChannelMissing)
 			return err
 		}
 		channelID = int(channel.ID)
 
 		// Пытаемся вступить в канал, чтобы иметь доступ к обсуждению
 		if errJoin := module.Modf_JoinChannel(ctx, api, channel, db, accountID); errJoin != nil {
+			if tg.IsChannelPrivate(errJoin) || strings.Contains(errJoin.Error(), "CHANNEL_PRIVATE") {
+				_ = db.SaveCategoryChannelDelete(channelURL, models.ReasonChannelClosed)
+				return errJoin
+			}
 			log.Printf("[ERROR] Не удалось вступить в канал: ID=%d Ошибка=%v", channel.ID, errJoin)
 		}
 
 		// Получаем чат обсуждения, не завязанный на конкретный пост
 		discussionChat, err := module.Modf_getDiscussionChat(ctx, api, channel, db, accountID)
 		if err != nil {
+			errStr := err.Error()
+			if strings.Contains(errStr, "нет чата обсуждения") || strings.Contains(errStr, "не удалось найти чат обсуждения") {
+				_ = db.SaveCategoryChannelDelete(channelURL, models.ReasonDiscussionClosed)
+			} else if strings.Contains(errStr, "CHANNEL_PRIVATE") {
+				_ = db.SaveCategoryChannelDelete(channelURL, models.ReasonChannelClosed)
+			}
 			return fmt.Errorf("не удалось получить чат обсуждения: %w", err)
 		}
 
 		if errJoin := module.Modf_JoinChannel(ctx, api, discussionChat, db, accountID); errJoin != nil {
+			if tg.IsChannelPrivate(errJoin) || strings.Contains(errJoin.Error(), "CHANNEL_PRIVATE") {
+				_ = db.SaveCategoryChannelDelete(channelURL, models.ReasonDiscussionClosed)
+				return errJoin
+			}
 			log.Printf("[ERROR] Не удалось вступить в чат обсуждения: ID=%d Ошибка=%v", discussionChat.ID, errJoin)
 		}
 
