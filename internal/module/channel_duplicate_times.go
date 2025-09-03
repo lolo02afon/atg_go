@@ -12,7 +12,7 @@ import (
 )
 
 // UpdateChannelDuplicateTimes обрабатывает POST /module/channel_duplicate/:id/post_count_day.
-// Ожидает JSON-массив времени в формате HH:MM и сохраняет его в БД.
+// Ожидает JSON-массив времени в формате HH:MM:SS и сохраняет его в БД.
 func (h *Handler) UpdateChannelDuplicateTimes(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -22,12 +22,12 @@ func (h *Handler) UpdateChannelDuplicateTimes(c *gin.Context) {
 
 	var times []string
 	if err := c.ShouldBindJSON(&times); err != nil {
-		httputil.RespondError(c, http.StatusBadRequest, "ожидается массив строк HH:MM")
+		httputil.RespondError(c, http.StatusBadRequest, "ожидается массив строк HH:MM:SS")
 		return
 	}
 
 	for _, t := range times {
-		if _, err := time.Parse("15:04", t); err != nil {
+		if _, err := time.Parse("15:04:05", t); err != nil {
 			httputil.RespondError(c, http.StatusBadRequest, "некорректный формат времени: "+t)
 			return
 		}
