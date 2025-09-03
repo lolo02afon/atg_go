@@ -22,9 +22,9 @@ func scanChannelDuplicateOrder(rs rowScanner) (ChannelDuplicateOrder, error) {
 		donorTGID, postRemove, postAdd, orderTGID sql.NullString
 		postSkip                                  []byte // JSON с условиями пропуска постов
 		lastPost                                  sql.NullInt64
-		postCountDay                              pq.StringArray
+		postCountDay, postReactions               pq.StringArray
 	)
-	if err := rs.Scan(&cd.ID, &cd.OrderID, &cd.URLChannelDonor, &donorTGID, &postRemove, &postAdd, &postSkip, &lastPost, &postCountDay, &cd.OrderURL, &orderTGID); err != nil {
+	if err := rs.Scan(&cd.ID, &cd.OrderID, &cd.URLChannelDonor, &donorTGID, &postRemove, &postAdd, &postSkip, &lastPost, &postCountDay, &postReactions, &cd.OrderURL, &orderTGID); err != nil {
 		return cd, err
 	}
 	if donorTGID.Valid {
@@ -42,6 +42,7 @@ func scanChannelDuplicateOrder(rs rowScanner) (ChannelDuplicateOrder, error) {
 		cd.LastPostID = &v
 	}
 	cd.PostCountDay = postCountDay
+	cd.PostReactions = postReactions
 	if orderTGID.Valid {
 		cd.OrderChannelTGID = &orderTGID.String
 	}
@@ -58,7 +59,7 @@ type ChannelDuplicateOrder struct {
 // GetChannelDuplicates возвращает список каналов-источников и связанные с ними заказы.
 func (db *DB) GetChannelDuplicates() ([]ChannelDuplicateOrder, error) {
 	rows, err := db.Conn.Query(`
-                SELECT cd.id, cd.order_id, cd.url_channel_donor, cd.channel_donor_tgid, cd.post_text_remove, cd.post_text_add, cd.post_skip, cd.last_post_id, cd.post_count_day,
+                SELECT cd.id, cd.order_id, cd.url_channel_donor, cd.channel_donor_tgid, cd.post_text_remove, cd.post_text_add, cd.post_skip, cd.last_post_id, cd.post_count_day, cd.post_reactions,
                        o.url_default, o.channel_tgid
                 FROM channel_duplicate cd
                 JOIN orders o ON cd.order_id = o.id
@@ -85,7 +86,7 @@ func (db *DB) GetChannelDuplicates() ([]ChannelDuplicateOrder, error) {
 // GetChannelDuplicateOrderByID возвращает запись дублирования с привязанным заказом по её ID.
 func (db *DB) GetChannelDuplicateOrderByID(id int) (*ChannelDuplicateOrder, error) {
 	row := db.Conn.QueryRow(`
-                SELECT cd.id, cd.order_id, cd.url_channel_donor, cd.channel_donor_tgid, cd.post_text_remove, cd.post_text_add, cd.post_skip, cd.last_post_id, cd.post_count_day,
+                SELECT cd.id, cd.order_id, cd.url_channel_donor, cd.channel_donor_tgid, cd.post_text_remove, cd.post_text_add, cd.post_skip, cd.last_post_id, cd.post_count_day, cd.post_reactions,
                        o.url_default, o.channel_tgid
                 FROM channel_duplicate cd
                 JOIN orders o ON cd.order_id = o.id
@@ -160,4 +161,18 @@ func (db *DB) UpdateChannelDuplicateTimes(id int, times pq.StringArray) error {
 		pq.Array(times), id,
 	)
 	return err
+}
+
+// GetPostReactionsForOrder возвращает список реакций для постов указанного заказа.
+// При отсутствии записи или NULL возвращает nil без ошибки.
+func (db *DB) GetPostReactionsForOrder(orderID int) (pq.StringArray, error) {
+	var reactions pq.StringArray
+	err := db.Conn.QueryRow(
+		`SELECT post_reactions FROM channel_duplicate WHERE order_id = $1 LIMIT 1`,
+		orderID,
+	).Scan(&reactions)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return reactions, err
 }
