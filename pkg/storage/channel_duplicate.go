@@ -24,7 +24,7 @@ func scanChannelDuplicateOrder(rs rowScanner) (ChannelDuplicateOrder, error) {
 		lastPost                                  sql.NullInt64
 		postCountDay                              pq.StringArray
 	)
-	if err := rs.Scan(&cd.ID, &cd.OrderID, &cd.URLChannelDonor, &donorTGID, &postRemove, &postAdd, &postSkip, &lastPost, pq.Array(&postCountDay), &cd.OrderURL, &orderTGID); err != nil {
+	if err := rs.Scan(&cd.ID, &cd.OrderID, &cd.URLChannelDonor, &donorTGID, &postRemove, &postAdd, &postSkip, &lastPost, &postCountDay, &cd.OrderURL, &orderTGID); err != nil {
 		return cd, err
 	}
 	if donorTGID.Valid {
