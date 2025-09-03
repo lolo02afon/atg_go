@@ -76,9 +76,46 @@ func (cdb *CommentDB) GetRandomChannel(orderID int) (string, error) {
 		return "", sql.ErrNoRows
 	}
 
-	// 4. Выбираем одну ссылку случайным образом, чтобы равномерно распределять нагрузку по URL.
+	// 4. Получаем список каналов, которые ранее были признаны недоступными,
+	// и исключаем их из выборки.
+	rows, err := cdb.Conn.Query(
+		`SELECT channel_url FROM category_channels_delete WHERE channel_url = ANY($1)`,
+		pq.Array(category.URLs),
+	)
+	if err != nil {
+		log.Printf("[DB ERROR] получение удалённых каналов: %v", err)
+		return "", err
+	}
+	defer rows.Close()
+
+	blocked := make(map[string]struct{})
+	for rows.Next() {
+		var u string
+		if err := rows.Scan(&u); err != nil {
+			log.Printf("[DB ERROR] чтение удалённых каналов: %v", err)
+			return "", err
+		}
+		blocked[u] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("[DB ERROR] завершение чтения удалённых каналов: %v", err)
+		return "", err
+	}
+
+	allowed := make([]string, 0, len(category.URLs))
+	for _, u := range category.URLs {
+		if _, found := blocked[u]; !found {
+			allowed = append(allowed, u)
+		}
+	}
+	if len(allowed) == 0 {
+		// Все каналы этой категории недоступны.
+		return "", sql.ErrNoRows
+	}
+
+	// 5. Выбираем одну ссылку случайным образом из оставшихся.
 	rand.Seed(time.Now().UnixNano())
-	url := category.URLs[rand.Intn(len(category.URLs))]
+	url := allowed[rand.Intn(len(allowed))]
 	log.Printf("[DB] выбран канал %s для заказа %d", url, orderID)
 
 	return url, nil
