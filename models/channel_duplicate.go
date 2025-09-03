@@ -25,5 +25,5 @@ type ChannelDuplicate struct {
 	PostTextAdd      *string         `json:"post_text_add"`      // Текст для добавления; ссылки: [текст](url)
 	PostSkip         json.RawMessage `json:"post_skip"`          // Условия пропуска: {"text":[], "url":[]}
 	LastPostID       *int            `json:"last_post_id"`       // ID последнего пересланного поста
-	PostCountDay     pq.StringArray  `json:"post_count_day"`     // Времена публикаций в формате HH:MM
+	PostCountDay     pq.StringArray  `json:"post_count_day"`     // Времена публикаций в формате HH:MM:SS
 }

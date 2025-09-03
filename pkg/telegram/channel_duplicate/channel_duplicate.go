@@ -27,7 +27,7 @@ type channelInfo struct {
 	add    *string        // Текст для добавления
 	skip   postSkip       // Условия пропуска постов
 	lastID *int           // ID последнего обработанного поста
-	times  pq.StringArray // Времена публикаций в формате HH:MM
+	times  pq.StringArray // Времена публикаций в формате HH:MM:SS
 }
 
 // copyMessage публикует копию сообщения в целевом канале.
@@ -450,19 +450,19 @@ func postFromHistory(ctx context.Context, api *tg.Client, db *storage.DB, donorI
 
 	for _, tStr := range info.times {
 		tStr = strings.TrimSpace(tStr)
-		parsed, err := time.Parse("15:04", tStr)
+		parsed, err := time.Parse("15:04:05", tStr)
 		if err != nil {
 			log.Printf("[CHANNEL DUPLICATE] неверный формат времени %q для канала %d: %v", tStr, donorID, err)
 			continue
 		}
-		hour, minute := parsed.Hour(), parsed.Minute()
-		log.Printf("[CHANNEL DUPLICATE] планируем публикацию в %02d:%02d для канала %d", hour, minute, donorID)
+		hour, minute, second := parsed.Hour(), parsed.Minute(), parsed.Second()
+		log.Printf("[CHANNEL DUPLICATE] планируем публикацию в %02d:%02d:%02d для канала %d", hour, minute, second, donorID)
 
 		// Запускаем отдельную горутину для каждого времени публикации
-		go func(h, m int, original string) {
+		go func(h, m, s int, original string) {
 			for {
 				now := time.Now()
-				next := time.Date(now.Year(), now.Month(), now.Day(), h, m, 0, 0, now.Location())
+				next := time.Date(now.Year(), now.Month(), now.Day(), h, m, s, 0, now.Location())
 				if !next.After(now) {
 					next = next.Add(24 * time.Hour)
 				}
@@ -475,11 +475,11 @@ func postFromHistory(ctx context.Context, api *tg.Client, db *storage.DB, donorI
 					timer.Stop()
 					return
 				case <-timer.C:
-					log.Printf("[CHANNEL DUPLICATE] наступило время %s для канала %d", next.Format("15:04"), donorID)
+					log.Printf("[CHANNEL DUPLICATE] наступило время %s для канала %d", next.Format("15:04:05"), donorID)
 					publishNextFromHistory(ctx, api, db, donorID, chMap)
 				}
 			}
-		}(hour, minute, tStr)
+		}(hour, minute, second, tStr)
 	}
 }
 
