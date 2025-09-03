@@ -28,6 +28,9 @@ func ProcessAccounts(
 	// выбор каналов не повторяли один и тот же шаблон.
 	rand.Seed(time.Now().UnixNano())
 
+	// Максимальное количество попыток для одного аккаунта.
+	const maxAttempts = 10
+
 	for i, account := range accounts {
 		if i > 0 {
 			// Пауза между аккаунтами делает активность менее подозрительной.
@@ -45,31 +48,41 @@ func ProcessAccounts(
 			}
 		}
 
-		// Выбираем канал для текущего аккаунта. Ошибку отсутствия каналов
-		// считаем фатальной и завершаем работу сразу.
-		channelURL, err := storage.PickRandomChannel(commentDB, *account.OrderID)
-		if err != nil {
-			if errors.Is(err, storage.ErrNoChannel) {
-				log.Printf("[HANDLER ERROR] Нет доступных каналов: %v", err)
-				httputil.RespondError(c, http.StatusNotFound, "No channels available")
-				return successCount, errorCount, err
+		// Несколько попыток выполнить действие: пока не удастся или не исчерпаем лимит.
+		for attempt := 1; attempt <= maxAttempts; attempt++ {
+			// Выбираем канал для текущей попытки. Отсутствие каналов считаем фатальной ошибкой.
+			channelURL, err := storage.PickRandomChannel(commentDB, *account.OrderID)
+			if err != nil {
+				if errors.Is(err, storage.ErrNoChannel) {
+					log.Printf("[HANDLER ERROR] Нет доступных каналов: %v", err)
+					httputil.RespondError(c, http.StatusNotFound, "No channels available")
+					return successCount, errorCount, err
+				}
+				// Прочие ошибки фиксируем и пробуем ещё раз.
+				log.Printf("[HANDLER WARN] Ошибка выбора канала для %s (попытка %d): %v", account.Phone, attempt, err)
+				if attempt == maxAttempts {
+					errorCount++
+				}
+				continue
 			}
-			// Прочие ошибки фиксируем и переходим к следующему аккаунту.
-			log.Printf("[HANDLER ERROR] Ошибка выбора канала для %s: %v", account.Phone, err)
-			errorCount++
-			continue
-		}
-		log.Printf("[HANDLER INFO] Выбран канал для %s: %s", account.Phone, channelURL)
+			log.Printf("[HANDLER INFO] Выбран канал для %s: %s (попытка %d)", account.Phone, channelURL, attempt)
 
-		// Коллбэк отправляет действие и возвращает, было ли оно успешным.
-		ok, err := send(account, channelURL)
-		if err != nil {
-			log.Printf("[HANDLER ERROR] Ошибка обработки для %s: %v", account.Phone, err)
-			errorCount++
-			continue
-		}
-		if ok {
-			successCount++
+			// Коллбэк отправляет действие и возвращает, было ли оно успешным.
+			ok, err := send(account, channelURL)
+			if err != nil {
+				log.Printf("[HANDLER WARN] Ошибка обработки для %s (попытка %d): %v", account.Phone, attempt, err)
+				if attempt == maxAttempts {
+					errorCount++
+				}
+				continue
+			}
+			if ok {
+				successCount++
+			} else if attempt == maxAttempts {
+				// Все попытки исчерпаны, результат не получен.
+				errorCount++
+			}
+			break
 		}
 	}
 
