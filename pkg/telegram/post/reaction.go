@@ -17,8 +17,9 @@ import (
 )
 
 // SendReaction добавляет реакцию к посту канала по ссылке postURL.
+// orderID нужен для выбора предопределённых реакций из channel_duplicate.
 // Функция не фиксирует активность аккаунта.
-func SendReaction(db *storage.DB, acc models.Account, postURL string) error {
+func SendReaction(db *storage.DB, acc models.Account, orderID int, postURL string) error {
 	// Блокируем аккаунт на время операции, чтобы избежать параллельного использования
 	if err := accountmutex.LockAccount(acc.ID); err != nil {
 		return err
@@ -94,17 +95,42 @@ func SendReaction(db *storage.DB, acc models.Account, postURL string) error {
 			}
 		}
 
-		// Определяем набор кандидатов для реакции
+		// Получаем список реакций из channel_duplicate, если он задан
+		reactions, err := db.GetPostReactionsForOrder(orderID)
+		if err != nil {
+			return err
+		}
+
+		rand.Seed(time.Now().UnixNano())
+
+		if len(reactions) > 0 {
+			// Используем заданную реакцию из БД
+			reaction := reactions[rand.Intn(len(reactions))]
+			send := func(r string) error {
+				_, err = api.MessagesSendReaction(ctx, &tg.MessagesSendReactionRequest{
+					Peer:        &tg.InputPeerChannel{ChannelID: ch.ID, AccessHash: ch.AccessHash},
+					MsgID:       msgID,
+					Reaction:    []tg.ReactionClass{&tg.ReactionEmoji{Emoticon: r}},
+					AddToRecent: true,
+				})
+				return err
+			}
+			if err = send(reaction); err != nil && len(existing) > 0 {
+				// При ошибке пробуем любую уже установленную реакцию
+				reaction = existing[rand.Intn(len(existing))]
+				err = send(reaction)
+			}
+			return err
+		}
+
+		// Стандартная логика выбора реакции
 		candidates := suggested
 		if len(existing) >= 2 {
-			// Если у поста уже две и более реакций, используем одну из них
 			candidates = existing
 		}
 		if len(candidates) == 0 {
 			return fmt.Errorf("нет доступных реакций")
 		}
-
-		rand.Seed(time.Now().UnixNano())
 		reaction := candidates[rand.Intn(len(candidates))]
 
 		_, err = api.MessagesSendReaction(ctx, &tg.MessagesSendReactionRequest{

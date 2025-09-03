@@ -101,7 +101,7 @@ func schedulePostViews(db *storage.DB, post models.ChannelPost, theory models.Ch
 						log.Printf("[MONITORING] обновление факта просмотров: %v", err)
 					}
 					if doReact {
-						if err := postaction.SendReaction(db, a, post.PostURL); err != nil {
+						if err := postaction.SendReaction(db, a, post.OrderID, post.PostURL); err != nil {
 							log.Printf("[MONITORING] реакция не выполнена: %v", err)
 						} else if err := db.IncrementChannelPostFact(theoryID, "reaction_24hour_fact"); err != nil {
 							log.Printf("[MONITORING] обновление факта реакций: %v", err)
