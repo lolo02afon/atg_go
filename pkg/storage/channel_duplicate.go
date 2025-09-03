@@ -166,13 +166,20 @@ func (db *DB) UpdateChannelDuplicateTimes(id int, times pq.StringArray) error {
 // GetPostReactionsForOrder возвращает список реакций для постов указанного заказа.
 // При отсутствии записи или NULL возвращает nil без ошибки.
 func (db *DB) GetPostReactionsForOrder(orderID int) (pq.StringArray, error) {
-	var reactions pq.StringArray
+	var raw sql.NullString
+	// Приводим массив к тексту, чтобы получить строку вида {"😀","😢"}
 	err := db.Conn.QueryRow(
-		`SELECT post_reactions FROM channel_duplicate WHERE order_id = $1 LIMIT 1`,
+		`SELECT post_reactions::text FROM channel_duplicate WHERE order_id = $1 LIMIT 1`,
 		orderID,
-	).Scan(&reactions)
-	if err == sql.ErrNoRows {
+	).Scan(&raw)
+	if err == sql.ErrNoRows || !raw.Valid {
+		// Поле отсутствует или равно NULL — используем стандартную логику
 		return nil, nil
 	}
-	return reactions, err
+	var reactions pq.StringArray
+	// pq.StringArray умеет разбирать строку с фигурными скобками
+	if err := reactions.Scan(raw.String); err != nil {
+		return nil, err
+	}
+	return reactions, nil
 }

@@ -26,5 +26,5 @@ type ChannelDuplicate struct {
 	PostSkip         json.RawMessage `json:"post_skip"`          // Условия пропуска: {"text":[], "url":[]}
 	LastPostID       *int            `json:"last_post_id"`       // ID последнего пересланного поста
 	PostCountDay     pq.StringArray  `json:"post_count_day"`     // Времена публикаций в формате HH:MM:SS
-	PostReactions    pq.StringArray  `json:"post_reactions"`     // Перечень реакций; NULL — стандартный выбор
+	PostReactions    pq.StringArray  `json:"post_reactions"`     // Перечень реакций, задаётся в виде {"😀","😂"}; NULL — стандартный выбор
 }
