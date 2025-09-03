@@ -497,8 +497,8 @@ func publishNextFromHistory(ctx context.Context, api *tg.Client, db *storage.DB,
 
 	currentID := *info.lastID
 	log.Printf("[CHANNEL DUPLICATE] публикация следующего поста после %d для канала %d", currentID, donorID)
-	// Ограничиваем число попыток, чтобы не попасть в бесконечный цикл при пропущенных ID
-	for attempts := 0; attempts < 10; attempts++ {
+	// Ограничиваем число попыток до 50, чтобы не попасть в бесконечный цикл при пропущенных ID
+	for attempts := 0; attempts < 50; attempts++ {
 		currentID++
 		log.Printf("[CHANNEL DUPLICATE] попытка %d: ищем пост %d для канала %d", attempts+1, currentID, donorID)
 		res, err := api.ChannelsGetMessages(ctx, &tg.ChannelsGetMessagesRequest{
