@@ -17,7 +17,7 @@ import (
 )
 
 // SendReaction добавляет реакцию к посту канала по ссылке postURL.
-// orderID нужен для выбора предопределённых реакций из channel_duplicate.
+// orderID нужен для выбора предопределённых реакций из заказа (orders).
 // Функция не фиксирует активность аккаунта.
 func SendReaction(db *storage.DB, acc models.Account, orderID int, postURL string) error {
 	// Блокируем аккаунт на время операции, чтобы избежать параллельного использования
@@ -95,7 +95,7 @@ func SendReaction(db *storage.DB, acc models.Account, orderID int, postURL strin
 			}
 		}
 
-		// Получаем список реакций из channel_duplicate, если он задан
+		// Получаем список реакций из заказа, если он задан
 		reactions, err := db.GetPostReactionsForOrder(orderID)
 		if err != nil {
 			return err

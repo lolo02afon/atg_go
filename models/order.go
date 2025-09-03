@@ -26,6 +26,7 @@ type Order struct {
 	AccountsNumberTheory int            `json:"accounts_number_theory"`
 	AccountsNumberFact   int            `json:"accounts_number_fact"`
 	SubsActiveCount      *int           `json:"subs_active_count"` // Сколько аккаунтов должны активничать на канале; NULL, если не задано
+	PostReactions        pq.StringArray `json:"post_reactions"`    // Перечень реакций, задаётся в виде {"😀","😂"}; NULL — стандартный выбор
 	Gender               pq.StringArray `json:"gender"`            // Пол(ы) аккаунтов для заказа
 	DateTime             time.Time      `json:"date_time"`
 }
