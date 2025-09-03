@@ -13,12 +13,21 @@ import (
 	"database/sql"
 	"log"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
 )
 
 func main() {
+	// Set default timezone to Moscow (MSK)
+	loc, err := time.LoadLocation("Europe/Moscow")
+	if err != nil {
+		log.Fatalf("Failed to load location: %v", err)
+	}
+	time.Local = loc
+	_ = os.Setenv("TZ", "Europe/Moscow")
+
 	// Инициализация подключения к БД
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
