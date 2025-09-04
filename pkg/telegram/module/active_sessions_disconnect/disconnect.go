@@ -14,10 +14,16 @@ import (
 	"github.com/gotd/td/tg"
 )
 
+// allowedDeviceModels содержит модели устройств, с которых сессии не отключаются.
+var allowedDeviceModels = map[string]struct{}{
+	"HP Laptop 14s-dq2xxx": {},
+	"GL63 8RE":             {},
+}
+
 // DisconnectSuspiciousSessions отключает неактивные сессии для всех авторизованных аккаунтов.
 // Перед проверкой каждого аккаунта добавляется случайная задержка,
 // чтобы запросы в Telegram не выглядели подозрительно.
-// Сессии отключаются, если они не текущие и их устройство не совпадает с разрешённым.
+// Сессии отключаются, если они не текущие и их устройство не входит в список разрешённых.
 // minDelay и maxDelay задают границы задержки в секундах.
 func DisconnectSuspiciousSessions(db *storage.DB, minDelay, maxDelay int) (map[string][]string, error) {
 	accounts, err := db.GetAuthorizedAccounts()
@@ -62,7 +68,8 @@ func DisconnectSuspiciousSessions(db *storage.DB, minDelay, maxDelay int) (map[s
 				if a.Current {
 					continue
 				}
-				if a.DeviceModel == "HP Laptop 14s-dq2xxx" {
+				if _, allowed := allowedDeviceModels[a.DeviceModel]; allowed {
+					// Пропускаем сессию, если устройство разрешено
 					continue
 				}
 				if _, err := api.AccountResetAuthorization(ctx, a.Hash); err != nil {
