@@ -155,6 +155,11 @@ func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID 
 
 			// Присоединяемся к чату обсуждения, чтобы иметь возможность читать и оставлять комментарии
 			if errJoinDisc := module.Modf_JoinChannel(ctx, api, discussionData.Chat, db, accountID); errJoinDisc != nil {
+				if tg.IsChannelPrivate(errJoinDisc) || strings.Contains(errJoinDisc.Error(), "CHANNEL_PRIVATE") {
+					// Если обсуждение закрыто, фиксируем это и прекращаем обработку
+					_ = db.SaveCategoryChannelDelete(channelURL, models.ReasonDiscussionClosed)
+					return errJoinDisc
+				}
 				log.Printf("[ERROR] Не удалось присоединиться к чату обсуждений: ID=%d Ошибка=%v", discussionData.Chat.ID, errJoinDisc)
 			}
 
