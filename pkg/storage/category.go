@@ -40,10 +40,18 @@ func (db *DB) CreateCategory(name string, urls []string) (*models.Category, erro
 	// Сначала сохраняем уникальные каналы в отдельную таблицу.
 	// Ошибки дубликатов игнорируются, чтобы не прерывать создание категории.
 	if len(urls) > 0 {
-		if _, err := db.Conn.Exec(`INSERT INTO channels (url)
-                        SELECT DISTINCT unnest($1::text[])
-                        ON CONFLICT DO NOTHING`, pq.Array(urls)); err != nil {
-			return nil, err
+		// Вставляем уникальные ссылки, дубли игнорируем через ON CONFLICT
+		_, err := db.Conn.Exec(`
+                        INSERT INTO channels (url)
+                        SELECT DISTINCT u
+                        FROM unnest($1::text[]) AS u
+                        ON CONFLICT (url) DO NOTHING
+                `, pq.Array(urls))
+		if err != nil {
+			// Если ошибка не связана с дубликатом ключа, возвращаем её
+			if pgErr, ok := err.(*pq.Error); !ok || pgErr.Code != "23505" {
+				return nil, err
+			}
 		}
 	}
 
