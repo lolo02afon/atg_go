@@ -9,20 +9,16 @@ import (
 	"atg_go/models"
 	"atg_go/pkg/storage"
 	module "atg_go/pkg/telegram/module"
-	accountmutex "atg_go/pkg/telegram/module/account_mutex"
 
 	"github.com/gotd/td/tg"
 )
 
 // GetChannelRecommendations возвращает список похожих каналов для указанного канала.
 // Работает от имени заданного аккаунта.
+// GetChannelRecommendations предполагает, что аккаунт уже заблокирован
+// вызывающей стороной. Это позволяет избежать повторных попыток
+// захвата одного и того же мьютекса при множественных запросах.
 func GetChannelRecommendations(db *storage.DB, acc models.Account, channelURL string) ([]string, error) {
-	if err := accountmutex.LockAccount(acc.ID); err != nil {
-		// Фиксируем проблемы при блокировке аккаунта
-		log.Printf("[GENERATION ERROR] не удалось заблокировать аккаунт %d: %v", acc.ID, err)
-		return nil, err
-	}
-	defer accountmutex.UnlockAccount(acc.ID)
 
 	client, err := module.Modf_AccountInitialization(acc.ApiID, acc.ApiHash, acc.Phone, acc.Proxy, nil, db.Conn, acc.ID, nil)
 	if err != nil {
