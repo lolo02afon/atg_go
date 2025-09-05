@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 
 	"atg_go/models"
+
+	"github.com/lib/pq"
 )
 
 // GetCategoryNames возвращает список названий всех категорий
@@ -35,10 +37,23 @@ func (db *DB) GetCategoryNames() ([]string, error) {
 // CreateCategory добавляет новую категорию с набором ссылок на каналы.
 // Ссылки сохраняются в JSONB, поэтому предварительно кодируем их в JSON.
 func (db *DB) CreateCategory(name string, urls []string) (*models.Category, error) {
+	// Сначала сохраняем уникальные каналы в отдельную таблицу.
+	// Ошибки дубликатов игнорируются, чтобы не прерывать создание категории.
+	if len(urls) > 0 {
+		if _, err := db.Conn.Exec(`INSERT INTO channels (url)
+                        SELECT DISTINCT unnest($1::text[])
+                        ON CONFLICT DO NOTHING`, pq.Array(urls)); err != nil {
+			return nil, err
+		}
+	}
+
+	// Готовим JSON для хранения ссылок в категории.
 	data, err := json.Marshal(urls)
 	if err != nil {
 		return nil, err
 	}
+
+	// Сохраняем категорию и возвращаем её идентификатор.
 	var id int
 	err = db.Conn.QueryRow(`INSERT INTO categories (name, urls) VALUES ($1, $2) RETURNING id`, name, data).Scan(&id)
 	if err != nil {
