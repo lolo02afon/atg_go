@@ -37,21 +37,25 @@ func (db *DB) GetCategoryNames() ([]string, error) {
 // CreateCategory добавляет новую категорию с набором ссылок на каналы.
 // Ссылки сохраняются в JSONB, поэтому предварительно кодируем их в JSON.
 func (db *DB) CreateCategory(name string, urls []string) (*models.Category, error) {
-	// Сначала сохраняем уникальные каналы в отдельную таблицу.
-	// Ошибки дубликатов игнорируются, чтобы не прерывать создание категории.
+	// Сохраняем уникальные каналы в отдельную таблицу.
 	if len(urls) > 0 {
-		// Вставляем уникальные ссылки, дубли игнорируем через ON CONFLICT
-		_, err := db.Conn.Exec(`
+		// Удаляем дубли ссылок на уровне Go.
+		uniq := make(map[string]struct{}, len(urls))
+		for _, u := range urls {
+			uniq[u] = struct{}{}
+		}
+		uniqueURLs := make([]string, 0, len(uniq))
+		for u := range uniq {
+			uniqueURLs = append(uniqueURLs, u)
+		}
+
+		// Вставляем ссылки; повторения игнорируются за счёт ON CONFLICT.
+		if _, err := db.Conn.Exec(`
                         INSERT INTO channels (url)
-                        SELECT DISTINCT u
-                        FROM unnest($1::text[]) AS u
+                        SELECT unnest($1::text[])
                         ON CONFLICT (url) DO NOTHING
-                `, pq.Array(urls))
-		if err != nil {
-			// Если ошибка не связана с дубликатом ключа, возвращаем её
-			if pgErr, ok := err.(*pq.Error); !ok || pgErr.Code != "23505" {
-				return nil, err
-			}
+                `, pq.Array(uniqueURLs)); err != nil {
+			return nil, err
 		}
 	}
 
