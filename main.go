@@ -3,6 +3,7 @@ package main
 import (
 	"atg_go/internal/auth"
 	"atg_go/internal/comments"
+	genchannels "atg_go/internal/generation_category_channels"
 	"atg_go/internal/middleware"
 	module "atg_go/internal/module"
 	orders "atg_go/internal/order"
@@ -99,6 +100,10 @@ func setupRouter(db *storage.DB, commentDB *storage.CommentDB) *gin.Engine {
 	// Группа роутов для статистики
 	statsGroup := r.Group("/statistics")
 	statistics.SetupRoutes(statsGroup, db)
+
+	// Группа роутов для генерации подборок каналов
+	genGroup := r.Group("/generation_category_channels")
+	genchannels.SetupRoutes(genGroup, db)
 
 	// Health check endpoint
 	r.GET("/health", func(c *gin.Context) {
