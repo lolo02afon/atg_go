@@ -60,7 +60,8 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 	defer cancel()
 
 	var mu sync.Mutex
-	results := make(map[string]struct{})
+	// results хранит найденные ссылки в порядке появления, дубликаты допускаются
+	results := make([]string, 0, req.ResultCountLinks)
 
 	queues := make([][]string, len(accounts))
 	for i, ch := range req.InputChannels {
@@ -95,19 +96,17 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 				}
 				mu.Lock()
 				for _, link := range recs {
-					if _, exists := results[link]; !exists {
-						results[link] = struct{}{}
-						// Каждые десять найденных каналов фиксируем в логах
-						if len(results)%10 == 0 {
-							log.Printf("[GENERATION INFO] записано %d похожих каналов, последний: %s", len(results), link)
-						}
-						if len(results) >= req.ResultCountLinks {
-							mu.Unlock()
-							cancel()
-							return
-						}
-						q = append(q, link)
+					results = append(results, link)
+					// Каждые десять найденных каналов фиксируем в логах
+					if len(results)%10 == 0 {
+						log.Printf("[GENERATION INFO] записано %d похожих каналов, последний: %s", len(results), link)
 					}
+					if len(results) >= req.ResultCountLinks {
+						mu.Unlock()
+						cancel()
+						return
+					}
+					q = append(q, link)
 				}
 				mu.Unlock()
 				time.Sleep(time.Duration(500+r.Intn(1000)) * time.Millisecond)
@@ -118,10 +117,8 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 	wg.Wait()
 
 	mu.Lock()
-	urls := make([]string, 0, len(results))
-	for url := range results {
-		urls = append(urls, url)
-	}
+	// Копируем найденные ссылки, чтобы вернуть их вызывающему коду
+	urls := append([]string(nil), results...)
 	mu.Unlock()
 
 	if _, err := h.DB.CreateCategory(req.NameCategory, urls); err != nil {
