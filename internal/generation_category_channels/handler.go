@@ -56,22 +56,28 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 		httputil.RespondError(c, http.StatusNotFound, "monitoring accounts not found")
 		return
 	}
+	log.Printf("[GENERATION DEBUG] получено %d аккаунтов мониторинга: %v", len(accounts), accountIDs(accounts))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Отбираем только свободные аккаунты и сразу блокируем их,
 	// чтобы избежать параллельного использования.
-	var free []models.Account
+	var (
+		free []models.Account
+		busy []int
+	)
 	for _, acc := range accounts {
 		if err := accountmutex.LockAccount(acc.ID); err != nil {
 			log.Printf("[GENERATION WARN] аккаунт %d пропущен: %v", acc.ID, err)
+			busy = append(busy, acc.ID)
 			continue
 		}
 		free = append(free, acc)
 	}
+	log.Printf("[GENERATION DEBUG] свободные аккаунты: %v, занятые: %v", accountIDs(free), busy)
 	if len(free) == 0 {
-		log.Printf("[GENERATION ERROR] нет свободных аккаунтов для генерации")
+		log.Printf("[GENERATION ERROR] нет свободных аккаунтов для генерации, заняты: %v", busy)
 		httputil.RespondError(c, http.StatusServiceUnavailable, "no free accounts")
 		return
 	}
@@ -92,11 +98,14 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 		go func(account models.Account, q []string) {
 			defer wg.Done()
 			defer accountmutex.UnlockAccount(account.ID)
+			log.Printf("[GENERATION DEBUG] аккаунт %d начал обработку %d каналов", account.ID, len(q))
+			defer log.Printf("[GENERATION DEBUG] аккаунт %d завершил обработку", account.ID)
 			r := rand.New(rand.NewSource(time.Now().UnixNano()))
 			processed := make(map[string]struct{})
 			for len(q) > 0 {
 				select {
 				case <-ctx.Done():
+					log.Printf("[GENERATION DEBUG] аккаунт %d остановлен по сигналу контекста", account.ID)
 					return
 				default:
 				}
@@ -120,6 +129,7 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 						log.Printf("[GENERATION INFO] записано %d похожих каналов, последний: %s", len(results), link)
 					}
 					if len(results) >= req.ResultCountLinks {
+						log.Printf("[GENERATION DEBUG] достигнут лимит %d результатов", req.ResultCountLinks)
 						mu.Unlock()
 						cancel()
 						return
@@ -138,6 +148,7 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 	// Копируем найденные ссылки, чтобы вернуть их вызывающему коду
 	urls := append([]string(nil), results...)
 	mu.Unlock()
+	log.Printf("[GENERATION INFO] найдено %d ссылок для категории %s", len(urls), req.NameCategory)
 
 	if _, err := h.DB.CreateCategory(req.NameCategory, urls); err != nil {
 		// Логируем ошибку сохранения итоговой категории
@@ -150,4 +161,13 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 		"status": "ok",
 		"count":  len(urls),
 	})
+}
+
+// accountIDs возвращает идентификаторы аккаунтов для вывода в журнал.
+func accountIDs(accs []models.Account) []int {
+	ids := make([]int, 0, len(accs))
+	for _, a := range accs {
+		ids = append(ids, a.ID)
+	}
+	return ids
 }
