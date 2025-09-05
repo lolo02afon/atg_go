@@ -38,26 +38,15 @@ func (db *DB) GetCategoryNames() ([]string, error) {
 // CreateCategory добавляет новую категорию с набором ссылок на каналы.
 // Ссылки сохраняются в JSONB, поэтому предварительно кодируем их в JSON.
 func (db *DB) CreateCategory(name string, urls []string) (*models.Category, error) {
-	// Сохраняем уникальные каналы в отдельную таблицу.
+	// Сохраняем ссылки в отдельной таблице без проверки уникальности.
 	if len(urls) > 0 {
-		// Удаляем дубли ссылок на уровне Go.
-		uniq := make(map[string]struct{}, len(urls))
-		for _, u := range urls {
-			uniq[u] = struct{}{}
-		}
-		uniqueURLs := make([]string, 0, len(uniq))
-		for u := range uniq {
-			uniqueURLs = append(uniqueURLs, u)
-		}
-
-		// Вставляем ссылки; повторения игнорируются за счёт ON CONFLICT.
+		// Вставляем ссылки как есть; возможные дубли разрешены.
 		if _, err := db.Conn.Exec(`
                        INSERT INTO channels (url)
                        SELECT unnest($1::text[])
-                       ON CONFLICT (url) DO NOTHING
-               `, pq.Array(uniqueURLs)); err != nil {
+               `, pq.Array(urls)); err != nil {
 			// Фиксируем проблему сохранения списка каналов
-			log.Printf("[DB ERROR] вставка каналов %v завершилась ошибкой: %v", uniqueURLs, err)
+			log.Printf("[DB ERROR] вставка каналов %v завершилась ошибкой: %v", urls, err)
 			return nil, err
 		}
 	}
