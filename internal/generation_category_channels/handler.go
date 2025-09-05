@@ -36,16 +36,22 @@ type request struct {
 func (h *Handler) GenerateCategory(c *gin.Context) {
 	var req request
 	if err := c.ShouldBindJSON(&req); err != nil {
+		// Логируем проблему с распознаванием входных данных
+		log.Printf("[GENERATION ERROR] некорректный формат запроса: %v", err)
 		httputil.RespondError(c, http.StatusBadRequest, "invalid request format")
 		return
 	}
 
 	accounts, err := h.DB.GetMonitoringAccounts()
 	if err != nil {
+		// Фиксируем ошибку получения аккаунтов мониторинга
+		log.Printf("[GENERATION ERROR] не удалось получить аккаунты мониторинга: %v", err)
 		httputil.RespondError(c, http.StatusInternalServerError, "failed to get monitoring accounts")
 		return
 	}
 	if len(accounts) == 0 {
+		// Сообщаем о пустом списке аккаунтов
+		log.Printf("[GENERATION ERROR] аккаунты мониторинга не найдены")
 		httputil.RespondError(c, http.StatusNotFound, "monitoring accounts not found")
 		return
 	}
@@ -83,13 +89,18 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 				processed[url] = struct{}{}
 				recs, err := telegram.GetChannelRecommendations(h.DB, account, url)
 				if err != nil {
-					log.Printf("[GENERATION WARN] %v", err)
+					// Предупреждение при проблемах с получением рекомендаций по каналу
+					log.Printf("[GENERATION WARN] не удалось получить рекомендации для %s: %v", url, err)
 					continue
 				}
 				mu.Lock()
 				for _, link := range recs {
 					if _, exists := results[link]; !exists {
 						results[link] = struct{}{}
+						// Каждые десять найденных каналов фиксируем в логах
+						if len(results)%10 == 0 {
+							log.Printf("[GENERATION INFO] записано %d похожих каналов, последний: %s", len(results), link)
+						}
 						if len(results) >= req.ResultCountLinks {
 							mu.Unlock()
 							cancel()
@@ -114,6 +125,8 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 	mu.Unlock()
 
 	if _, err := h.DB.CreateCategory(req.NameCategory, urls); err != nil {
+		// Логируем ошибку сохранения итоговой категории
+		log.Printf("[GENERATION ERROR] не удалось сохранить категорию: %v", err)
 		httputil.RespondError(c, http.StatusInternalServerError, "failed to save category")
 		return
 	}
