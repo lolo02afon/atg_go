@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 
 	"atg_go/models"
 
@@ -51,10 +52,12 @@ func (db *DB) CreateCategory(name string, urls []string) (*models.Category, erro
 
 		// Вставляем ссылки; повторения игнорируются за счёт ON CONFLICT.
 		if _, err := db.Conn.Exec(`
-                        INSERT INTO channels (url)
-                        SELECT unnest($1::text[])
-                        ON CONFLICT (url) DO NOTHING
-                `, pq.Array(uniqueURLs)); err != nil {
+                       INSERT INTO channels (url)
+                       SELECT unnest($1::text[])
+                       ON CONFLICT (url) DO NOTHING
+               `, pq.Array(uniqueURLs)); err != nil {
+			// Фиксируем проблему сохранения списка каналов
+			log.Printf("[DB ERROR] вставка каналов %v завершилась ошибкой: %v", uniqueURLs, err)
 			return nil, err
 		}
 	}

@@ -12,6 +12,7 @@ import (
 	"atg_go/models"
 	"atg_go/pkg/storage"
 	"atg_go/pkg/telegram"
+	accountmutex "atg_go/pkg/telegram/module/account_mutex"
 
 	"github.com/gin-gonic/gin"
 )
@@ -59,21 +60,38 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Отбираем только свободные аккаунты и сразу блокируем их,
+	// чтобы избежать параллельного использования.
+	var free []models.Account
+	for _, acc := range accounts {
+		if err := accountmutex.LockAccount(acc.ID); err != nil {
+			log.Printf("[GENERATION WARN] аккаунт %d пропущен: %v", acc.ID, err)
+			continue
+		}
+		free = append(free, acc)
+	}
+	if len(free) == 0 {
+		log.Printf("[GENERATION ERROR] нет свободных аккаунтов для генерации")
+		httputil.RespondError(c, http.StatusServiceUnavailable, "no free accounts")
+		return
+	}
+
 	var mu sync.Mutex
 	// results хранит найденные ссылки в порядке появления, дубликаты допускаются
 	results := make([]string, 0, req.ResultCountLinks)
 
-	queues := make([][]string, len(accounts))
+	queues := make([][]string, len(free))
 	for i, ch := range req.InputChannels {
-		queues[i%len(accounts)] = append(queues[i%len(accounts)], ch)
+		queues[i%len(free)] = append(queues[i%len(free)], ch)
 	}
 
 	var wg sync.WaitGroup
-	for i, acc := range accounts {
+	for i, acc := range free {
 		queue := append([]string(nil), queues[i]...)
 		wg.Add(1)
 		go func(account models.Account, q []string) {
 			defer wg.Done()
+			defer accountmutex.UnlockAccount(account.ID)
 			r := rand.New(rand.NewSource(time.Now().UnixNano()))
 			processed := make(map[string]struct{})
 			for len(q) > 0 {
