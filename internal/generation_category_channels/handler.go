@@ -1,9 +1,11 @@
 package generation_category_channels
 
 import (
+	"context"
 	"log"
 	"math/rand"
 	"net/http"
+	"sync"
 	"time"
 
 	"atg_go/internal/httputil"
@@ -56,6 +58,9 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 	}
 	log.Printf("[GENERATION DEBUG] получено %d аккаунтов генерации: %v", len(accounts), accountIDs(accounts))
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Отбираем только свободные аккаунты и сразу блокируем их,
 	// чтобы избежать параллельного использования.
 	var (
@@ -77,75 +82,94 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 		return
 	}
 
+	var mu sync.Mutex
 	// results хранит уникальные найденные ссылки в порядке появления
 	results := make([]string, 0, req.ResultCountLinks)
 	// seen используется для отслеживания уже добавленных ссылок
 	seen := make(map[string]struct{})
-	// processed помогает не запрашивать рекомендации повторно для одного и того же канала
-	processed := make(map[string]struct{})
 
-	// очередь каналов на обработку
-	queue := append([]string(nil), req.InputChannels...)
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	accIdx := 0 // индекс аккаунта для последовательного использования
-
-	// Освобождаем занятые аккаунты по завершении работы
-	defer func() {
-		for _, a := range free {
-			accountmutex.UnlockAccount(a.ID)
-		}
-	}()
-
-	for len(queue) > 0 && len(results) < req.ResultCountLinks {
-		url := queue[0]
-		queue = queue[1:]
-		if _, ok := processed[url]; ok {
-			continue
-		}
-		processed[url] = struct{}{}
-
-		acc := free[accIdx%len(free)]
-		accIdx++
-		recs, err := telegram.GetChannelRecommendations(h.DB, acc, url)
-		if err != nil {
-			log.Printf("[GENERATION WARN] не удалось получить рекомендации для %s аккаунтом %d: %v", url, acc.ID, err)
-			continue
-		}
-
-		for _, link := range recs {
-			accCheck := free[accIdx%len(free)]
-			accIdx++
-			ok, err := telegram.HasAccessibleDiscussion(h.DB, accCheck, link)
-			if err != nil {
-				log.Printf("[GENERATION WARN] не удалось проверить обсуждение для %s аккаунтом %d: %v", link, accCheck.ID, err)
-				continue
-			}
-			if !ok {
-				continue
-			}
-			if _, exists := seen[link]; exists {
-				continue
-			}
-			seen[link] = struct{}{}
-			results = append(results, link)
-			if len(results)%10 == 0 {
-				log.Printf("[GENERATION INFO] записано %d похожих каналов, последний: %s", len(results), link)
-			}
-			if len(results) >= req.ResultCountLinks {
-				break
-			}
-			queue = append(queue, link)
-			time.Sleep(time.Duration(500+r.Intn(1000)) * time.Millisecond)
-		}
-
-		if len(results) >= req.ResultCountLinks {
-			break
-		}
+	queues := make([][]string, len(free))
+	for i, ch := range req.InputChannels {
+		queues[i%len(free)] = append(queues[i%len(free)], ch)
 	}
 
-	log.Printf("[GENERATION INFO] найдено %d ссылок для категории %s", len(results), req.NameCategory)
+	var wg sync.WaitGroup
+	for i, acc := range free {
+		queue := append([]string(nil), queues[i]...)
+		wg.Add(1)
+		go func(account models.Account, q []string) {
+			defer wg.Done()
+			defer accountmutex.UnlockAccount(account.ID)
+			log.Printf("[GENERATION DEBUG] аккаунт %d начал обработку %d каналов", account.ID, len(q))
+			defer log.Printf("[GENERATION DEBUG] аккаунт %d завершил обработку", account.ID)
+			r := rand.New(rand.NewSource(time.Now().UnixNano()))
+			processed := make(map[string]struct{})
+			for len(q) > 0 {
+				select {
+				case <-ctx.Done():
+					log.Printf("[GENERATION DEBUG] аккаунт %d остановлен по сигналу контекста", account.ID)
+					return
+				default:
+				}
+				url := q[0]
+				q = q[1:]
+				if _, ok := processed[url]; ok {
+					continue
+				}
+				processed[url] = struct{}{}
+				recs, err := telegram.GetChannelRecommendations(h.DB, account, url)
+				if err != nil {
+					// Предупреждение при проблемах с получением рекомендаций по каналу
+					log.Printf("[GENERATION WARN] не удалось получить рекомендации для %s: %v", url, err)
+					continue
+				}
+				for _, link := range recs {
+					ok, err := telegram.HasAccessibleDiscussion(h.DB, account, link)
+					if err != nil {
+						// Сообщаем об ошибке проверки обсуждения
+						log.Printf("[GENERATION WARN] не удалось проверить обсуждение для %s: %v", link, err)
+						continue
+					}
+					if !ok {
+						// Пропускаем канал без свободного обсуждения
+						continue
+					}
 
-	if _, err := h.DB.CreateCategory(req.NameCategory, results); err != nil {
+					mu.Lock()
+					if _, exists := seen[link]; exists {
+						mu.Unlock()
+						continue
+					}
+					seen[link] = struct{}{}
+					results = append(results, link)
+					// Каждые десять найденных каналов фиксируем в логах
+					if len(results)%10 == 0 {
+						log.Printf("[GENERATION INFO] записано %d похожих каналов, последний: %s", len(results), link)
+					}
+					if len(results) >= req.ResultCountLinks {
+						log.Printf("[GENERATION DEBUG] достигнут лимит %d результатов", req.ResultCountLinks)
+						mu.Unlock()
+						cancel()
+						return
+					}
+					mu.Unlock()
+
+					q = append(q, link)
+				}
+				time.Sleep(time.Duration(500+r.Intn(1000)) * time.Millisecond)
+			}
+		}(acc, queue)
+	}
+
+	wg.Wait()
+
+	mu.Lock()
+	// Копируем найденные ссылки, чтобы вернуть их вызывающему коду
+	urls := append([]string(nil), results...)
+	mu.Unlock()
+	log.Printf("[GENERATION INFO] найдено %d ссылок для категории %s", len(urls), req.NameCategory)
+
+	if _, err := h.DB.CreateCategory(req.NameCategory, urls); err != nil {
 		// Логируем ошибку сохранения итоговой категории
 		log.Printf("[GENERATION ERROR] не удалось сохранить категорию: %v", err)
 		httputil.RespondError(c, http.StatusInternalServerError, "failed to save category")
@@ -154,7 +178,7 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"status": "ok",
-		"count":  len(results),
+		"count":  len(urls),
 	})
 }
 
