@@ -17,12 +17,16 @@ import (
 
 // Handler обрабатывает запросы генерации подборки каналов.
 type Handler struct {
-	DB *storage.DB
+	DB    *storage.DB
+	queue chan struct{} // очередь на выполнение запросов генерации
 }
 
 // NewHandler создаёт новый экземпляр обработчика.
 func NewHandler(db *storage.DB) *Handler {
-	return &Handler{DB: db}
+	return &Handler{
+		DB:    db,
+		queue: make(chan struct{}, 1), // допускаем единовременную обработку одного запроса
+	}
 }
 
 type request struct {
@@ -40,6 +44,10 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 		httputil.RespondError(c, http.StatusBadRequest, "invalid request format")
 		return
 	}
+
+	// Ставим запрос в очередь: пока предыдущий не завершён, новый ожидает
+	h.queue <- struct{}{}
+	defer func() { <-h.queue }()
 
 	accounts, err := h.DB.GetGeneratorCategoryAccounts()
 	if err != nil {
