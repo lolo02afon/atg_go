@@ -317,21 +317,7 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 		}
 
 		if len(info.times) > 0 {
-			// При наличии расписания публикуем посты только по таймеру
-			if info.lastID == nil {
-				// Инициализируем last_post_id текущим сообщением - 1, чтобы начать работу таймеров
-				initID := msg.ID - 1
-				if _, remove, add, err := db.TrySetLastPostID(info.id, initID); err != nil {
-					log.Printf("[CHANNEL DUPLICATE] установка начального last_post_id: %v", err)
-				} else {
-					info.remove = remove
-					info.add = add
-					info.lastID = &initID
-					chMap[peer.ChannelID] = info
-					// Запускаем таймеры для публикации по расписанию
-					go postFromHistory(ctx, api, db, peer.ChannelID, chMap)
-				}
-			}
+			// Для каналов с расписанием публикуем посты только по таймерам
 			log.Printf("[CHANNEL DUPLICATE] пост %d из канала %d отложен согласно расписанию", msg.ID, peer.ChannelID)
 			return nil
 		}
@@ -443,10 +429,20 @@ func registerDuplicate(ctx context.Context, api *tg.Client, db *storage.DB, acco
 		times:  cd.PostCountDay,
 	}
 
-	if cd.LastPostID != nil && len(cd.PostCountDay) > 0 {
-		// Фиксируем запуск публикации из истории по расписанию
+	if cd.LastPostID == nil {
+		// В БД всегда ожидается last_post_id; при его отсутствии выходим
+		log.Printf("[CHANNEL DUPLICATE] для канала %d отсутствует last_post_id", donorCh.ID)
+		return
+	}
+
+	if len(cd.PostCountDay) > 0 {
+		// При наличии расписания запускаем публикацию по временным меткам
 		log.Printf("[CHANNEL DUPLICATE] обнаружены last_post_id %d и расписание %v для канала %d", *cd.LastPostID, cd.PostCountDay, donorCh.ID)
 		go postFromHistory(ctx, api, db, donorCh.ID, chMap)
+	} else {
+		// Без расписания сразу публикуем все пропущенные посты
+		log.Printf("[CHANNEL DUPLICATE] обнаружен last_post_id %d без расписания для канала %d", *cd.LastPostID, donorCh.ID)
+		go postFromHistoryImmediate(ctx, api, db, donorCh.ID, chMap)
 	}
 }
 
@@ -501,6 +497,31 @@ func postFromHistory(ctx context.Context, api *tg.Client, db *storage.DB, donorI
 				}
 			}
 		}(hour, minute, second, tStr)
+	}
+}
+
+// postFromHistoryImmediate публикует все неотправленные посты один за другим без ожидания по расписанию.
+// Используется, когда post_count_day не содержит временных меток.
+func postFromHistoryImmediate(ctx context.Context, api *tg.Client, db *storage.DB, donorID int64, chMap map[int64]channelInfo) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		info, ok := chMap[donorID]
+		if !ok || info.lastID == nil {
+			return
+		}
+
+		prev := *info.lastID
+		publishNextFromHistory(ctx, api, db, donorID, chMap)
+		info = chMap[donorID]
+		if info.lastID == nil || *info.lastID == prev {
+			// Новых постов не найдено — выходим
+			return
+		}
 	}
 }
 
