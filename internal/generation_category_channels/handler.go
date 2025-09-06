@@ -123,10 +123,21 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 					log.Printf("[GENERATION WARN] не удалось получить рекомендации для %s: %v", url, err)
 					continue
 				}
-				mu.Lock()
 				for _, link := range recs {
-					if _, ok := seen[link]; ok {
-						// Если ссылка уже была добавлена, пропускаем её
+					ok, err := telegram.HasAccessibleDiscussion(h.DB, account, link)
+					if err != nil {
+						// Сообщаем об ошибке проверки обсуждения
+						log.Printf("[GENERATION WARN] не удалось проверить обсуждение для %s: %v", link, err)
+						continue
+					}
+					if !ok {
+						// Пропускаем канал без свободного обсуждения
+						continue
+					}
+
+					mu.Lock()
+					if _, exists := seen[link]; exists {
+						mu.Unlock()
 						continue
 					}
 					seen[link] = struct{}{}
@@ -141,9 +152,10 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 						cancel()
 						return
 					}
+					mu.Unlock()
+
 					q = append(q, link)
 				}
-				mu.Unlock()
 				time.Sleep(time.Duration(500+r.Intn(1000)) * time.Millisecond)
 			}
 		}(acc, queue)
