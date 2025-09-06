@@ -500,28 +500,94 @@ func postFromHistory(ctx context.Context, api *tg.Client, db *storage.DB, donorI
 	}
 }
 
-// postFromHistoryImmediate публикует все неотправленные посты один за другим без ожидания по расписанию.
-// Используется, когда post_count_day не содержит временных меток.
+// postFromHistoryImmediate публикует все пропущенные посты сразу.
+// Используется, когда post_count_day равен NULL.
 func postFromHistoryImmediate(ctx context.Context, api *tg.Client, db *storage.DB, donorID int64, chMap map[int64]channelInfo) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
+	info, ok := chMap[donorID]
+	if !ok || info.lastID == nil {
+		return
+	}
 
-		info, ok := chMap[donorID]
-		if !ok || info.lastID == nil {
-			return
-		}
+	// Получаем ID последнего поста на донорском канале
+	posts, err := base.GetChannelPosts(ctx, api, info.donor, 1)
+	if err != nil {
+		log.Printf("[CHANNEL DUPLICATE] получение последнего поста канала %d: %v", donorID, err)
+		return
+	}
+	lastDonorID := posts[0].ID
 
-		prev := *info.lastID
-		publishNextFromHistory(ctx, api, db, donorID, chMap)
-		info = chMap[donorID]
-		if info.lastID == nil || *info.lastID == prev {
-			// Новых постов не найдено — выходим
-			return
+	// Если сохранённый ID уже соответствует последнему посту, публикация не требуется
+	if *info.lastID >= lastDonorID {
+		return
+	}
+
+	// Перебираем все ID от сохранённого до последнего поста включительно
+	for id := *info.lastID + 1; id <= lastDonorID; id++ {
+		publishPostByID(ctx, api, db, donorID, chMap, id)
+	}
+}
+
+// publishPostByID публикует указанный пост из истории, если он существует.
+// Используется только при отсутствии расписания публикаций.
+func publishPostByID(ctx context.Context, api *tg.Client, db *storage.DB, donorID int64, chMap map[int64]channelInfo, postID int) {
+	info, ok := chMap[donorID]
+	if !ok {
+		log.Printf("[CHANNEL DUPLICATE] нет информации о канале %d при публикации поста %d", donorID, postID)
+		return
+	}
+
+	res, err := api.ChannelsGetMessages(ctx, &tg.ChannelsGetMessagesRequest{
+		Channel: &tg.InputChannel{ChannelID: info.donor.ID, AccessHash: info.donor.AccessHash},
+		ID:      []tg.InputMessageClass{&tg.InputMessageID{ID: postID}},
+	})
+	if err != nil {
+		log.Printf("[CHANNEL DUPLICATE] получение поста %d: %v", postID, err)
+		return
+	}
+
+	var msg *tg.Message
+	switch m := res.(type) {
+	case *tg.MessagesChannelMessages:
+		if len(m.Messages) > 0 {
+			if mm, ok := m.Messages[0].(*tg.Message); ok {
+				msg = mm
+			}
 		}
+	case *tg.MessagesMessages:
+		if len(m.Messages) > 0 {
+			if mm, ok := m.Messages[0].(*tg.Message); ok {
+				msg = mm
+			}
+		}
+	}
+	if msg == nil {
+		log.Printf("[CHANNEL DUPLICATE] пост %d не найден в канале %d", postID, donorID)
+		return
+	}
+
+	updated, remove, add, err := db.TrySetLastPostID(info.id, msg.ID)
+	if err != nil {
+		log.Printf("[CHANNEL DUPLICATE] обновление last_post_id: %v", err)
+		return
+	}
+
+	info.lastID = &msg.ID
+	chMap[donorID] = info
+	if !updated {
+		log.Printf("[CHANNEL DUPLICATE] пост %d уже был опубликован для канала %d", msg.ID, donorID)
+		return
+	}
+	info.remove = remove
+	info.add = add
+	chMap[donorID] = info
+
+	if err := processMessage(ctx, api, info, msg); err != nil {
+		saveErr := db.SaveSos(fmt.Sprintf("не удалось скопировать пост %d с канала %d: %v", msg.ID, info.donor.ID, err))
+		if saveErr != nil {
+			log.Printf("[CHANNEL DUPLICATE] ошибка записи в Sos: %v", saveErr)
+		}
+	} else {
+		log.Printf("[CHANNEL DUPLICATE] опубликован пост %d для канала %d", msg.ID, donorID)
 	}
 }
 
