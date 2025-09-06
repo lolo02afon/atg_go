@@ -104,6 +104,16 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 		}
 	}()
 
+	// Сначала проверяем входные каналы и добавляем подходящие в результаты
+	for _, link := range req.InputChannels {
+		if len(results) >= req.ResultCountLinks {
+			break
+		}
+		acc := free[accIdx%len(free)]
+		accIdx++
+		h.appendChannelIfAccessible(acc, link, seen, &results)
+	}
+
 	for len(queue) > 0 && len(results) < req.ResultCountLinks {
 		url := queue[0]
 		queue = queue[1:]
@@ -123,19 +133,9 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 		for _, link := range recs {
 			accCheck := free[accIdx%len(free)]
 			accIdx++
-			ok, err := telegram.HasAccessibleDiscussion(h.DB, accCheck, link)
-			if err != nil {
-				log.Printf("[GENERATION WARN] не удалось проверить обсуждение для %s аккаунтом %d: %v", link, accCheck.ID, err)
+			if !h.appendChannelIfAccessible(accCheck, link, seen, &results) {
 				continue
 			}
-			if !ok {
-				continue
-			}
-			if _, exists := seen[link]; exists {
-				continue
-			}
-			seen[link] = struct{}{}
-			results = append(results, link)
 			if len(results)%10 == 0 {
 				log.Printf("[GENERATION INFO] записано %d похожих каналов, последний: %s", len(results), link)
 			}
@@ -164,6 +164,26 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 		"status": "ok",
 		"count":  len(results),
 	})
+}
+
+// appendChannelIfAccessible проверяет, что у канала есть открытое обсуждение,
+// и добавляет ссылку в результаты, если её ещё не было.
+// Возвращает true, если ссылка добавлена.
+func (h *Handler) appendChannelIfAccessible(acc models.Account, link string, seen map[string]struct{}, results *[]string) bool {
+	ok, err := telegram.HasAccessibleDiscussion(h.DB, acc, link)
+	if err != nil {
+		log.Printf("[GENERATION WARN] не удалось проверить обсуждение для %s аккаунтом %d: %v", link, acc.ID, err)
+		return false
+	}
+	if !ok {
+		return false
+	}
+	if _, exists := seen[link]; exists {
+		return false
+	}
+	seen[link] = struct{}{}
+	*results = append(*results, link)
+	return true
 }
 
 // accountIDs возвращает идентификаторы аккаунтов для вывода в журнал.
