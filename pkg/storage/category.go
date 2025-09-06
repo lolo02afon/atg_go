@@ -38,12 +38,13 @@ func (db *DB) GetCategoryNames() ([]string, error) {
 // CreateCategory добавляет новую категорию с набором ссылок на каналы.
 // Ссылки сохраняются в JSONB, поэтому предварительно кодируем их в JSON.
 func (db *DB) CreateCategory(name string, urls []string) (*models.Category, error) {
-	// Сохраняем ссылки в отдельной таблице без проверки уникальности.
+	// Сохраняем ссылки в отдельной таблице, исключая дубли.
 	if len(urls) > 0 {
-		// Вставляем ссылки как есть; возможные дубли разрешены.
+		// Вставляем только уникальные ссылки; существующие записи игнорируются.
 		if _, err := db.Conn.Exec(`
                        INSERT INTO channels (url)
-                       SELECT unnest($1::text[])
+                       SELECT DISTINCT unnest($1::text[])
+                       ON CONFLICT (url) DO NOTHING
                `, pq.Array(urls)); err != nil {
 			// Фиксируем проблему сохранения списка каналов
 			log.Printf("[DB ERROR] вставка каналов %v завершилась ошибкой: %v", urls, err)
