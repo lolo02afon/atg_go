@@ -315,6 +315,27 @@ func Connect(ctx context.Context, api *tg.Client, dispatcher *tg.UpdateDispatche
 		if !ok {
 			return nil
 		}
+
+		if len(info.times) > 0 {
+			// При наличии расписания публикуем посты только по таймеру
+			if info.lastID == nil {
+				// Инициализируем last_post_id текущим сообщением - 1, чтобы начать работу таймеров
+				initID := msg.ID - 1
+				if _, remove, add, err := db.TrySetLastPostID(info.id, initID); err != nil {
+					log.Printf("[CHANNEL DUPLICATE] установка начального last_post_id: %v", err)
+				} else {
+					info.remove = remove
+					info.add = add
+					info.lastID = &initID
+					chMap[peer.ChannelID] = info
+					// Запускаем таймеры для публикации по расписанию
+					go postFromHistory(ctx, api, db, peer.ChannelID, chMap)
+				}
+			}
+			log.Printf("[CHANNEL DUPLICATE] пост %d из канала %d отложен согласно расписанию", msg.ID, peer.ChannelID)
+			return nil
+		}
+
 		updated, remove, add, err := db.TrySetLastPostID(info.id, msg.ID)
 		if err != nil {
 			log.Printf("[CHANNEL DUPLICATE] обновление last_post_id: %v", err)
