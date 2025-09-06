@@ -24,9 +24,20 @@ func ModF_UnsubscribeAll(db *storage.DB, delay [2]int, limit int) error {
 		return err
 	}
 
-	// Преобразуем ссылки в множество имён каналов
+	// Преобразуем ссылки из заказов в множество имён каналов
 	skipChannels := make(map[string]struct{})
 	for _, l := range orderLinks {
+		if name, ok := channelUsernameFromLink(l); ok {
+			skipChannels[strings.ToLower(name)] = struct{}{}
+		}
+	}
+
+	// Дополняем множество ссылками, отписка от которых запрещена явно
+	keepLinks, err := db.GetChannelsNotUnsubscribeURLs()
+	if err != nil {
+		return err
+	}
+	for _, l := range keepLinks {
 		if name, ok := channelUsernameFromLink(l); ok {
 			skipChannels[strings.ToLower(name)] = struct{}{}
 		}
