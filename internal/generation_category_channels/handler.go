@@ -83,8 +83,10 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 	}
 
 	var mu sync.Mutex
-	// results хранит найденные ссылки в порядке появления, дубликаты допускаются
+	// results хранит уникальные найденные ссылки в порядке появления
 	results := make([]string, 0, req.ResultCountLinks)
+	// seen используется для отслеживания уже добавленных ссылок
+	seen := make(map[string]struct{})
 
 	queues := make([][]string, len(free))
 	for i, ch := range req.InputChannels {
@@ -123,6 +125,11 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 				}
 				mu.Lock()
 				for _, link := range recs {
+					if _, ok := seen[link]; ok {
+						// Если ссылка уже была добавлена, пропускаем её
+						continue
+					}
+					seen[link] = struct{}{}
 					results = append(results, link)
 					// Каждые десять найденных каналов фиксируем в логах
 					if len(results)%10 == 0 {
