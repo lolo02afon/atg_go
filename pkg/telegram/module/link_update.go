@@ -27,6 +27,10 @@ func Modf_OrderLinkUpdate(db *storage.DB) error {
 		log.Printf("[LINK_UPDATE ERROR] освобождение мониторинговых аккаунтов: %v", err)
 		return err
 	}
+	if err := db.ReleaseGeneratorCategoryAccounts(); err != nil {
+		log.Printf("[LINK_UPDATE ERROR] освобождение аккаунтов генерации категорий: %v", err)
+		return err
+	}
 
 	// Перед обновлением описаний синхронизируем количество аккаунтов в заказах
 	if err := db.AssignFreeAccountsToOrders(); err != nil {

@@ -59,6 +59,7 @@ func (db *DB) GetAccountByID(id int) (*models.Account, error) {
 	// Приводим gender к text[], чтобы можно было сканировать напрямую без вспомогательных типов
 	query := `
               SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.gender::text[], a.proxy_id, a.order_id,
+                     a.account_monitoring, a.account_generator_category,
                      p.id, p.ip, p.port, p.login, p.password, p.ipv6, p.account_count, p.is_active
               FROM accounts a
               LEFT JOIN proxy p ON a.proxy_id = p.id
@@ -74,6 +75,8 @@ func (db *DB) GetAccountByID(id int) (*models.Account, error) {
 		&account.Gender, // драйвер сам преобразует массив text[] в срез строк
 		&account.ProxyID,
 		&account.OrderID,
+		&account.AccountMonitoring,
+		&account.AccountGeneratorCategory,
 		&proxyID,
 		&proxyIP,
 		&proxyPort,
@@ -135,6 +138,7 @@ func (db *DB) GetLastAccount() (*models.Account, error) {
 	// Каст к text[] избавляет от необходимости использовать pq.Array при чтении
 	query := `
               SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.gender::text[], a.proxy_id, a.order_id,
+                     a.account_monitoring, a.account_generator_category,
                      p.id, p.ip, p.port, p.login, p.password, p.ipv6, p.account_count, p.is_active
               FROM accounts a
               LEFT JOIN proxy p ON a.proxy_id = p.id
@@ -153,6 +157,8 @@ func (db *DB) GetLastAccount() (*models.Account, error) {
 		&account.Gender, // массив читается напрямую
 		&account.ProxyID,
 		&account.OrderID,
+		&account.AccountMonitoring,
+		&account.AccountGeneratorCategory,
 		&proxyID,
 		&proxyIP,
 		&proxyPort,
@@ -318,6 +324,7 @@ func (db *DB) AssignProxyToAccount(accountID, proxyID int, limit int) error {
 func (db *DB) getAccounts(where string, args ...any) ([]models.Account, error) {
 	query := `
       SELECT a.id, a.phone, a.api_id, a.api_hash, a.phone_code_hash, a.is_authorized, a.gender::text[], a.proxy_id, a.order_id,
+             a.account_monitoring, a.account_generator_category,
              p.id, p.ip, p.port, p.login, p.password, p.ipv6, p.account_count, p.is_active
       FROM accounts a
       LEFT JOIN proxy p ON a.proxy_id = p.id
@@ -334,16 +341,18 @@ func (db *DB) getAccounts(where string, args ...any) ([]models.Account, error) {
 	for rows.Next() {
 		var account models.Account
 		var (
-			proxyID        sql.NullInt64
-			proxyIP        sql.NullString
-			proxyPort      sql.NullInt64
-			proxyLogin     sql.NullString
-			proxyPassword  sql.NullString
-			proxyIPv6      sql.NullString
-			proxyCount     sql.NullInt64
-			proxyIsActive  sql.NullBool
-			accountProxyID sql.NullInt64
-			accountOrderID sql.NullInt64
+			proxyID                  sql.NullInt64
+			proxyIP                  sql.NullString
+			proxyPort                sql.NullInt64
+			proxyLogin               sql.NullString
+			proxyPassword            sql.NullString
+			proxyIPv6                sql.NullString
+			proxyCount               sql.NullInt64
+			proxyIsActive            sql.NullBool
+			accountProxyID           sql.NullInt64
+			accountOrderID           sql.NullInt64
+			accountMonitoring        bool
+			accountGeneratorCategory bool
 		)
 
 		if err := rows.Scan(
@@ -356,6 +365,8 @@ func (db *DB) getAccounts(where string, args ...any) ([]models.Account, error) {
 			&account.Gender,
 			&accountProxyID,
 			&accountOrderID,
+			&accountMonitoring,
+			&accountGeneratorCategory,
 			&proxyID,
 			&proxyIP,
 			&proxyPort,
@@ -377,6 +388,8 @@ func (db *DB) getAccounts(where string, args ...any) ([]models.Account, error) {
 			id := int(accountOrderID.Int64)
 			account.OrderID = &id
 		}
+		account.AccountMonitoring = accountMonitoring
+		account.AccountGeneratorCategory = accountGeneratorCategory
 
 		if proxyID.Valid {
 			account.Proxy = &models.Proxy{
@@ -399,7 +412,7 @@ func (db *DB) getAccounts(where string, args ...any) ([]models.Account, error) {
 // GetAuthorizedAccounts возвращает все авторизованные аккаунты без мониторинга,
 // чтобы сервисы могли быстро получить список рабочих сессий.
 func (db *DB) GetAuthorizedAccounts() ([]models.Account, error) {
-	accounts, err := db.getAccounts("a.is_authorized = true AND a.account_monitoring = false")
+	accounts, err := db.getAccounts("a.is_authorized = true AND a.account_monitoring = false AND a.account_generator_category = false")
 	if err == nil {
 		log.Printf("[DB INFO] Found %d authorized accounts", len(accounts))
 	}
@@ -417,6 +430,22 @@ func (db *DB) GetMonitoringAccounts() ([]models.Account, error) {
 func (db *DB) ReleaseMonitoringAccounts() error {
 	if _, err := db.Conn.Exec(`UPDATE accounts SET order_id = NULL WHERE account_monitoring = TRUE AND order_id IS NOT NULL`); err != nil {
 		log.Printf("[DB ERROR] освобождение мониторинговых аккаунтов: %v", err)
+		return err
+	}
+	return nil
+}
+
+// GetGeneratorCategoryAccounts возвращает авторизованные аккаунты,
+// предназначенные только для генерации подборок каналов.
+func (db *DB) GetGeneratorCategoryAccounts() ([]models.Account, error) {
+	return db.getAccounts("a.is_authorized = true AND a.account_generator_category = true")
+}
+
+// ReleaseGeneratorCategoryAccounts снимает привязку заказов с аккаунтов генерации категорий.
+// Это страхует от случайного назначения таких аккаунтов на заказы.
+func (db *DB) ReleaseGeneratorCategoryAccounts() error {
+	if _, err := db.Conn.Exec(`UPDATE accounts SET order_id = NULL WHERE account_generator_category = TRUE AND order_id IS NOT NULL`); err != nil {
+		log.Printf("[DB ERROR] освобождение аккаунтов генерации категорий: %v", err)
 		return err
 	}
 	return nil

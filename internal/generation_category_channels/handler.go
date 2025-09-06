@@ -43,20 +43,20 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 		return
 	}
 
-	accounts, err := h.DB.GetMonitoringAccounts()
+	accounts, err := h.DB.GetGeneratorCategoryAccounts()
 	if err != nil {
-		// Фиксируем ошибку получения аккаунтов мониторинга
-		log.Printf("[GENERATION ERROR] не удалось получить аккаунты мониторинга: %v", err)
-		httputil.RespondError(c, http.StatusInternalServerError, "failed to get monitoring accounts")
+		// Фиксируем ошибку получения аккаунтов генерации
+		log.Printf("[GENERATION ERROR] не удалось получить аккаунты генерации категорий: %v", err)
+		httputil.RespondError(c, http.StatusInternalServerError, "failed to get generator accounts")
 		return
 	}
 	if len(accounts) == 0 {
 		// Сообщаем о пустом списке аккаунтов
-		log.Printf("[GENERATION ERROR] аккаунты мониторинга не найдены")
-		httputil.RespondError(c, http.StatusNotFound, "monitoring accounts not found")
+		log.Printf("[GENERATION ERROR] аккаунты генерации категорий не найдены")
+		httputil.RespondError(c, http.StatusNotFound, "generator accounts not found")
 		return
 	}
-	log.Printf("[GENERATION DEBUG] получено %d аккаунтов мониторинга: %v", len(accounts), accountIDs(accounts))
+	log.Printf("[GENERATION DEBUG] получено %d аккаунтов генерации: %v", len(accounts), accountIDs(accounts))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
