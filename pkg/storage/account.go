@@ -419,6 +419,16 @@ func (db *DB) GetAuthorizedAccounts() ([]models.Account, error) {
 	return accounts, err
 }
 
+// GetAllAuthorizedAccounts возвращает все авторизованные аккаунты,
+// включая мониторинговые и для генерации категорий.
+func (db *DB) GetAllAuthorizedAccounts() ([]models.Account, error) {
+	accounts, err := db.getAccounts("a.is_authorized = true")
+	if err == nil {
+		log.Printf("[DB INFO] Found %d authorized accounts (all)", len(accounts))
+	}
+	return accounts, err
+}
+
 // GetMonitoringAccounts возвращает авторизованные аккаунты,
 // помеченные как мониторинговые.
 func (db *DB) GetMonitoringAccounts() ([]models.Account, error) {

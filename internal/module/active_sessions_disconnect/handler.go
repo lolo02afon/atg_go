@@ -21,15 +21,20 @@ func NewHandler(db *storage.DB) *Handler {
 	return &Handler{DB: db}
 }
 
-// Info выводит в журнал активные сессии нескольких случайных
-// (до пяти) авторизованных аккаунтов, чтобы контролировать объём
-// логов и при этом иметь представление о разных пользователях.
+// Info проверяет, доступны ли все авторизованные аккаунты.
+// Возвращает сообщение об успехе или список аккаунтов,
+// к которым программа потеряла доступ.
 func (h *Handler) Info(c *gin.Context) {
-	if err := telegrammodule.LogAuthorizations(h.DB); err != nil {
+	lost, err := telegrammodule.CheckAccountsState(h.DB)
+	if err != nil {
 		httputil.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "logged"})
+	if len(lost) == 0 {
+		c.JSON(http.StatusOK, gin.H{"status": "все аккаунты авторизованы"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"потеряны": lost})
 }
 
 // Disconnect отключает подозрительные сессии на всех авторизованных аккаунтах.
