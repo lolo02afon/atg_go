@@ -242,9 +242,7 @@ func processMessage(ctx context.Context, api *tg.Client, info channelInfo, msg *
 
 	// Подбираем сообщение для ответа
 	var replyTo *int
-	if id, err := findReplyTarget(ctx, api, info.donor, info.target, msg); err != nil {
-		log.Printf("[CHANNEL DUPLICATE] поиск сообщения для ответа: %v", err)
-	} else if id != 0 {
+	if id, err := findReplyTarget(ctx, api, info.donor, info.target, msg); err == nil && id != 0 {
 		replyTo = &id
 	}
 
@@ -374,13 +372,11 @@ func registerDuplicate(ctx context.Context, api *tg.Client, db *storage.DB, acco
 	}
 	settings := tg.InputPeerNotifySettings{}
 	settings.SetMuteUntil(0)
-	_, err = api.AccountUpdateNotifySettings(ctx, &tg.AccountUpdateNotifySettingsRequest{
+	// Ошибку настройки уведомлений игнорируем: отсутствие прав не критично
+	_, _ = api.AccountUpdateNotifySettings(ctx, &tg.AccountUpdateNotifySettingsRequest{
 		Peer:     &tg.InputNotifyPeer{Peer: &tg.InputPeerChannel{ChannelID: donorCh.ID, AccessHash: donorCh.AccessHash}},
 		Settings: settings,
 	})
-	if err != nil {
-		log.Printf("[CHANNEL DUPLICATE] уведомления %s: %v", cd.URLChannelDonor, err)
-	}
 	donorIDStr := fmt.Sprintf("%d", donorCh.ID)
 	if cd.ChannelDonorTGID == nil || *cd.ChannelDonorTGID != donorIDStr {
 		_ = db.SetChannelDonorTGID(cd.ID, donorIDStr)
@@ -446,16 +442,7 @@ func registerDuplicate(ctx context.Context, api *tg.Client, db *storage.DB, acco
 // Для каждого времени создаётся отдельная горутина, которая раз в сутки публикует следующий пост.
 func postFromHistory(ctx context.Context, api *tg.Client, db *storage.DB, donorID int64, chMap map[int64]channelInfo) {
 	info, ok := chMap[donorID]
-	if !ok {
-		log.Printf("[CHANNEL DUPLICATE] канал %d не найден для запуска публикации из истории", donorID)
-		return
-	}
-	if info.lastID == nil {
-		log.Printf("[CHANNEL DUPLICATE] для канала %d отсутствует last_post_id", donorID)
-		return
-	}
-	if len(info.times) == 0 {
-		log.Printf("[CHANNEL DUPLICATE] для канала %d не заданы времена публикации", donorID)
+	if !ok || info.lastID == nil || len(info.times) == 0 {
 		return
 	}
 
@@ -522,7 +509,6 @@ func postFromHistoryImmediate(ctx context.Context, api *tg.Client, db *storage.D
 func publishPostByID(ctx context.Context, api *tg.Client, db *storage.DB, donorID int64, chMap map[int64]channelInfo, postID int) {
 	info, ok := chMap[donorID]
 	if !ok {
-		log.Printf("[CHANNEL DUPLICATE] нет информации о канале %d при публикации поста %d", donorID, postID)
 		return
 	}
 
@@ -531,7 +517,6 @@ func publishPostByID(ctx context.Context, api *tg.Client, db *storage.DB, donorI
 		ID:      []tg.InputMessageClass{&tg.InputMessageID{ID: postID}},
 	})
 	if err != nil {
-		log.Printf("[CHANNEL DUPLICATE] получение поста %d: %v", postID, err)
 		return
 	}
 
@@ -551,7 +536,6 @@ func publishPostByID(ctx context.Context, api *tg.Client, db *storage.DB, donorI
 		}
 	}
 	if msg == nil {
-		log.Printf("[CHANNEL DUPLICATE] пост %d не найден в канале %d", postID, donorID)
 		return
 	}
 
@@ -582,11 +566,7 @@ func publishPostByID(ctx context.Context, api *tg.Client, db *storage.DB, donorI
 // publishNextFromHistory берёт следующий пост после last_post_id и публикует его в целевой канал.
 func publishNextFromHistory(ctx context.Context, api *tg.Client, db *storage.DB, donorID int64, chMap map[int64]channelInfo) {
 	info, ok := chMap[donorID]
-	if !ok {
-		log.Printf("[CHANNEL DUPLICATE] нет информации о канале %d при публикации из истории", donorID)
-		return
-	}
-	if info.lastID == nil {
+	if !ok || info.lastID == nil {
 		log.Printf("[CHANNEL DUPLICATE] отсутствует last_post_id для канала %d", donorID)
 		return
 	}
@@ -600,7 +580,6 @@ func publishNextFromHistory(ctx context.Context, api *tg.Client, db *storage.DB,
 			ID:      []tg.InputMessageClass{&tg.InputMessageID{ID: currentID}},
 		})
 		if err != nil {
-			log.Printf("[CHANNEL DUPLICATE] получение поста %d: %v", currentID, err)
 			return
 		}
 
@@ -620,7 +599,6 @@ func publishNextFromHistory(ctx context.Context, api *tg.Client, db *storage.DB,
 			}
 		}
 		if msg == nil {
-			log.Printf("[CHANNEL DUPLICATE] пост %d не найден в канале %d", currentID, donorID)
 			continue
 		}
 
