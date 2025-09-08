@@ -7,6 +7,7 @@ import (
 	"atg_go/models"
 	"atg_go/pkg/storage"
 	"atg_go/pkg/telegram"
+	stats "atg_go/pkg/telegram/statistics"
 	"log"
 	"net/http"
 
@@ -87,6 +88,11 @@ func (h *ReactionHandler) SendReaction(c *gin.Context) {
 	if err != nil {
 		// Ответ уже отправлен внутри обработчика, поэтому завершаем выполнение.
 		return
+	}
+
+	// Фиксируем успешные реакции в статистике
+	if err := stats.IncrementReaction(h.DB, successCount); err != nil {
+		log.Printf("[HANDLER ERROR] не удалось обновить статистику: %v", err)
 	}
 
 	result := gin.H{
