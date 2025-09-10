@@ -2,7 +2,7 @@ package module
 
 import (
 	authcheck "atg_go/internal/module/account_auth_check"
-	activesessions "atg_go/internal/module/active_sessions_disconnect"
+	accountssessions "atg_go/internal/module/accounts_sessions_disconnect"
 	"atg_go/pkg/storage"
 
 	"github.com/gin-gonic/gin"
@@ -17,5 +17,5 @@ func SetupRoutes(r *gin.RouterGroup, db *storage.DB) {
 	r.POST("/order/link_updat", handler.OrderLinkUpdate)
 	r.POST("/channel_duplicate/:id/post_count_day", handler.UpdateChannelDuplicateTimes)
 	authcheck.SetupRoutes(r.Group("/account_auth_check"), db)
-	activesessions.SetupRoutes(r.Group("/active_sessions_disconnect"), db)
+	accountssessions.SetupRoutes(r.Group("/accounts_sessions_disconnect"), db)
 }
