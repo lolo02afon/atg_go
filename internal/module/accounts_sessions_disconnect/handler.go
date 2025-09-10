@@ -1,4 +1,4 @@
-package active_sessions_disconnect
+package accounts_sessions_disconnect
 
 import (
 	"log"
@@ -6,7 +6,7 @@ import (
 
 	"atg_go/internal/httputil"
 	"atg_go/pkg/storage"
-	telegrammodule "atg_go/pkg/telegram/module/active_sessions_disconnect"
+	telegrammodule "atg_go/pkg/telegram/module/accounts_sessions_disconnect"
 
 	"github.com/gin-gonic/gin"
 )
@@ -67,7 +67,7 @@ func (h *Handler) Disconnect(c *gin.Context) {
 	res, err := telegrammodule.DisconnectSuspiciousSessions(h.DB, minDelay, maxDelay)
 	if err != nil {
 		// Логируем ошибку, чтобы понять, где произошёл сбой
-		log.Printf("[ACTIVE SESSIONS DISCONNECT] ошибка выполнения: %v", err)
+		log.Printf("[ACCOUNTS SESSIONS DISCONNECT] ошибка выполнения: %v", err)
 		httputil.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}

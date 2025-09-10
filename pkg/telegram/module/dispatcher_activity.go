@@ -33,8 +33,8 @@ type UnsubscribeSettings struct {
 	DispatcherStart string `json:"dispatcher_start"`
 }
 
-// ActiveSessionsDisconnectSettings задаёт время отключения активных сессий.
-type ActiveSessionsDisconnectSettings struct {
+// AccountsSessionsDisconnectSettings задаёт время отключения активных сессий.
+type AccountsSessionsDisconnectSettings struct {
 	DispatcherStart string `json:"dispatcher_start"`
 }
 
@@ -125,7 +125,7 @@ func runActivityInPeriod(ctx context.Context, base time.Time, loc *time.Location
 
 // ModF_DispatcherActivity выполняет запросы активности в течение
 // заданного количества суток и реагирует на отмену контекста.
-func ModF_DispatcherActivity(ctx context.Context, daysNumber int, activities []ActivityRequest, commentCfg, reactionCfg ActivitySettings, unsubscribeCfg UnsubscribeSettings, disconnectCfg ActiveSessionsDisconnectSettings) {
+func ModF_DispatcherActivity(ctx context.Context, daysNumber int, activities []ActivityRequest, commentCfg, reactionCfg ActivitySettings, unsubscribeCfg UnsubscribeSettings, disconnectCfg AccountsSessionsDisconnectSettings) {
 	rand.Seed(time.Now().UnixNano())
 
 	// Загружаем часовую зону Москвы и фиксируем текущее время в ней,
@@ -177,7 +177,7 @@ func ModF_DispatcherActivity(ctx context.Context, daysNumber int, activities []A
 					defer wg.Done()
 					runAtDispatcherStart(ctx, start, loc, act, unsubscribeCfg.DispatcherStart, offset)
 				}(act, day)
-			case strings.Contains(act.URL, "active_sessions_disconnect"):
+			case strings.Contains(act.URL, "accounts_sessions_disconnect"):
 				if disconnectCfg.DispatcherStart == "" {
 					continue
 				}
