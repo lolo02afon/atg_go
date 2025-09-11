@@ -84,10 +84,19 @@ func DisconnectSuspiciousSessions(db *storage.DB, minDelay, maxDelay int) (map[s
 				}
 				log.Printf("[ACCOUNTS SESSIONS DISCONNECT] аккаунт %s: отключено устройство %s", acc.Phone, a.DeviceModel)
 				result[acc.Phone] = append(result[acc.Phone], a.DeviceModel)
+				// Увеличиваем счётчик отключённых сессий.
+				if incErr := db.IncreaseAccountsSessionsDisconnect(); incErr != nil {
+					log.Printf("[ACCOUNTS SESSIONS DISCONNECT] ошибка увеличения счётчика сессий: %v", incErr)
+				}
 			}
 			return nil
 		}); err != nil {
 			log.Printf("[ACCOUNTS SESSIONS DISCONNECT] аккаунт %s: ошибка обработки: %v", acc.Phone, err)
+			continue
+		}
+		// Фиксируем успешно проверенный аккаунт.
+		if incErr := db.IncreaseAccountsCheck(); incErr != nil {
+			log.Printf("[ACCOUNTS SESSIONS DISCONNECT] ошибка увеличения счётчика аккаунтов: %v", incErr)
 		}
 	}
 
