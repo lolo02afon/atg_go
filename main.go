@@ -2,12 +2,11 @@ package main
 
 import (
 	"atg_go/internal/auth"
-	"atg_go/internal/comments"
 	genchannels "atg_go/internal/generation_category_channels"
+	invite "atg_go/internal/invite_activities"
 	"atg_go/internal/middleware"
 	module "atg_go/internal/module"
 	orders "atg_go/internal/order"
-	reaction "atg_go/internal/reaction"
 	statistics "atg_go/internal/statistics"
 	telegram "atg_go/internal/telegram"
 	"atg_go/pkg/storage"
@@ -81,13 +80,9 @@ func setupRouter(db *storage.DB, commentDB *storage.CommentDB) *gin.Engine {
 	authGroup := r.Group("/auth")
 	auth.SetupRoutes(authGroup, db) // Передаем только хранилище аккаунтов
 
-	// Группа роутов для комментариев
-	commentGroup := r.Group("/comment")
-	comments.SetupRoutes(commentGroup, db, commentDB) // Передаем оба хранилища
-
-	// Группа роутов для реакций на чужие комментарии
-	reactionGroup := r.Group("/reaction")
-	reaction.SetupRoutes(reactionGroup, db, commentDB)
+	// Группа роутов для комментариев и реакций в чужих обсуждениях
+	inviteGroup := r.Group("/invite_activities")
+	invite.SetupRoutes(inviteGroup, db, commentDB)
 
 	// Группа роутов для telegram-модуля
 	moduleGroup := r.Group("/module")

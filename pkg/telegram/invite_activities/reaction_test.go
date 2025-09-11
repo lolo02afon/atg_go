@@ -1,4 +1,4 @@
-package reaction
+package invite_activities
 
 import (
 	"testing"
