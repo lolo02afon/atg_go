@@ -1,6 +1,6 @@
-// Package comment отправляет комментарии от имени аккаунтов в обсуждения каналов.
-// Вынесен в подпакет, чтобы разграничить работу с комментариями.
-package comment
+// Package invite_activities содержит логику публикации комментариев.
+// Размещён отдельно, чтобы отделить взаимодействия в обсуждениях от остальных частей.
+package invite_activities
 
 import (
 	"context"
@@ -18,13 +18,13 @@ import (
 	"github.com/gotd/td/tg"
 )
 
-// SendComment подключается к Telegram, находит случайный пост в указанном канале
+// sendComment подключается к Telegram, находит случайный пост в указанном канале
 // и отправляет случайный эмодзи в обсуждение этого поста.
 // После отправки сохраняет запись об активности в таблице activity.
 // Возвращает ID поста, к которому оставлен комментарий (int),
 // ID исходного канала (int) и ошибку.
 // При неудаче оба идентификатора равны 0.
-func SendComment(db *storage.DB, accountID int, phone, channelURL string, apiID int, apiHash string, postsCount int, canSend func(channelID, messageID int) (bool, error), userIDs []int, proxy *models.Proxy) (int, int, error) {
+func sendComment(db *storage.DB, accountID int, phone, channelURL string, apiID int, apiHash string, postsCount int, canSend func(channelID, messageID int) (bool, error), userIDs []int, proxy *models.Proxy) (int, int, error) {
 	log.Printf("[START] Отправка эмодзи в канал %s от имени %s", channelURL, phone)
 
 	// Блокируем аккаунт, чтобы избежать параллельного использования

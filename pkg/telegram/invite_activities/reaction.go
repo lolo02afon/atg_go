@@ -1,6 +1,6 @@
-// Package reaction отвечает за отправку реакций в обсуждения каналов.
-// Подпакет отделяет логику реакций от остальных частей системы.
-package reaction
+// Package invite_activities содержит логику отправки реакций.
+// Подпакет отделяет работу с реакциями от других частей системы.
+package invite_activities
 
 import (
 	"context"
@@ -18,13 +18,13 @@ import (
 	"github.com/gotd/td/tg"
 )
 
-// SendReaction добавляет реакцию к последнему сообщению обсуждения канала.
+// sendReaction добавляет реакцию к последнему сообщению обсуждения канала.
 // В качестве идентификатора используется ID сообщения из чата обсуждения,
 // который отличается от ID поста в канале. После успешной отправки
 // сохраняет запись об активности в таблице activity. Возвращает ID сообщения,
 // к которому была поставлена реакция (int), ID исходного канала (int) и
 // ошибку. При неудаче оба идентификатора равны 0.
-func SendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID int, apiHash string, msgCount int, proxy *models.Proxy) (int, int, error) {
+func sendReaction(db *storage.DB, accountID int, phone, channelURL string, apiID int, apiHash string, msgCount int, proxy *models.Proxy) (int, int, error) {
 	log.Printf("[START] Отправка реакции в канал %s от имени %s", channelURL, phone)
 
 	// Захватываем мьютекс для аккаунта, чтобы исключить параллельное использование
