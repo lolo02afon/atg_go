@@ -37,6 +37,11 @@ func CheckAccountsState(db *storage.DB) ([]string, error) {
 		if err != nil {
 			log.Printf("[ACCOUNTS SESSIONS] аккаунт %d (%s): потерян доступ: %v", acc.ID, acc.Phone, err)
 			lost = append(lost, acc.Phone)
+			continue
+		}
+		// Фиксируем успешно проверенный аккаунт.
+		if incErr := db.IncreaseAccountsCheck(); incErr != nil {
+			log.Printf("[ACCOUNTS SESSIONS] ошибка увеличения счётчика: %v", incErr)
 		}
 	}
 
