@@ -1,0 +1,2 @@
+-- Миграция: переименование таблицы accounts_sessions_disconnect в accounts_sessions_disconnect_statistics
+ALTER TABLE accounts_sessions_disconnect RENAME TO accounts_sessions_disconnect_statistics;

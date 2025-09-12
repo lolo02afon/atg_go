@@ -1,0 +1,103 @@
+package module
+
+import (
+	"context"
+	"log"
+	"time"
+
+	"atg_go/models"
+	"atg_go/pkg/storage"
+	accountmutex "atg_go/pkg/telegram/technical/account_mutex"
+
+	"github.com/gotd/td/tg"
+)
+
+// Modf_OrderLinkUpdate обновляет описание у всех аккаунтов согласно их order_id
+// Если order_id есть, в описание ставится текст из поля url_description соответствующего заказа,
+// иначе описание очищается. Комментарии на русском языке по требованию пользователя.
+func Modf_OrderLinkUpdate(db *storage.DB) error {
+	// Перед основными операциями заполняем отсутствующие channel_tgid у заказов
+	if err := Modf_UpdateOrdersChannelTGID(db); err != nil {
+		log.Printf("[LINK_UPDATE ERROR] обновление channel_tgid: %v", err)
+		return err
+	}
+
+	// Сначала освобождаем аккаунты под мониторингом, если они случайно привязаны к заказам
+	if err := db.ReleaseMonitoringAccounts(); err != nil {
+		log.Printf("[LINK_UPDATE ERROR] освобождение мониторинговых аккаунтов: %v", err)
+		return err
+	}
+	if err := db.ReleaseGeneratorCategoryAccounts(); err != nil {
+		log.Printf("[LINK_UPDATE ERROR] освобождение аккаунтов генерации категорий: %v", err)
+		return err
+	}
+
+	// Перед обновлением описаний синхронизируем количество аккаунтов в заказах
+	if err := db.AssignFreeAccountsToOrders(); err != nil {
+		log.Printf("[LINK_UPDATE ERROR] назначение аккаунтов: %v", err)
+		return err
+	}
+
+	// Получаем все авторизованные аккаунты
+	accounts, err := db.GetAuthorizedAccounts()
+	if err != nil {
+		log.Printf("[LINK_UPDATE ERROR] выборка аккаунтов: %v", err)
+		return err
+	}
+
+	for _, acc := range accounts {
+		var description string
+		if acc.OrderID != nil {
+			// Получаем текст для описания из заказа (поле url_description)
+			order, err := db.GetOrderByID(*acc.OrderID)
+			if err != nil {
+				log.Printf("[LINK_UPDATE ERROR] заказ %d: %v", *acc.OrderID, err)
+				continue
+			}
+			description = order.URLDescription
+		}
+		if err := updateAccountDescription(db, acc, description); err != nil {
+			log.Printf("[LINK_UPDATE ERROR] аккаунт %d: %v", acc.ID, err)
+		}
+	}
+	return nil
+}
+
+// updateAccountDescription устанавливает новое описание (about) для аккаунта
+// Описание берётся из поля url_description заказа
+func updateAccountDescription(db *storage.DB, acc models.Account, description string) error {
+	// Блокируем аккаунт, чтобы не выполнять параллельные операции
+	if err := accountmutex.LockAccount(acc.ID); err != nil {
+		return err
+	}
+	defer accountmutex.UnlockAccount(acc.ID)
+
+	// Инициализируем клиента Telegram
+	client, err := Modf_AccountInitialization(acc.ApiID, acc.ApiHash, acc.Phone, acc.Proxy, nil, db.Conn, acc.ID, nil)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	return client.Run(ctx, func(ctx context.Context) error {
+		api := tg.NewClient(client)
+		// Сначала очищаем текущее описание, чтобы гарантированно заменить его
+		reqClear := tg.AccountUpdateProfileRequest{}
+		reqClear.SetAbout("")
+		if _, err := api.AccountUpdateProfile(ctx, &reqClear); err != nil {
+			return err
+		}
+
+		// Если требуется установить описание, делаем второй запрос
+		if description != "" {
+			reqSet := tg.AccountUpdateProfileRequest{}
+			reqSet.SetAbout(description)
+			if _, err := api.AccountUpdateProfile(ctx, &reqSet); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}

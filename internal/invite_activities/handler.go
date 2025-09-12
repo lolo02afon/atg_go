@@ -1,14 +1,14 @@
 package invite_activities
 
 import (
-	"atg_go/internal/activity"
-	"atg_go/internal/common"
-	"atg_go/internal/httputil"
+	"atg_go/internal/technical/activity"
+	"atg_go/internal/technical/common"
+	"atg_go/internal/technical/httputil"
 	"atg_go/models"
 	"atg_go/pkg/storage"
-	tg "atg_go/pkg/telegram"
+	userpkg "atg_go/pkg/telegram/base/user"
 	invact "atg_go/pkg/telegram/invite_activities"
-	stats "atg_go/pkg/telegram/statistics"
+	stats "atg_go/pkg/telegram/invite_activities_statistics"
 	"log"
 	"net/http"
 
@@ -65,7 +65,7 @@ func (h *Handler) SendComment(c *gin.Context) {
 
 	var userIDs []int
 	for _, acc := range accounts {
-		id, err := tg.GetUserID(h.DB, acc.ID, acc.Phone, acc.ApiID, acc.ApiHash, acc.Proxy)
+		id, err := userpkg.GetUserID(h.DB, acc.ID, acc.Phone, acc.ApiID, acc.ApiHash, acc.Proxy)
 		if err != nil {
 			log.Printf("[HANDLER WARN] Не удалось получить ID для %s: %v", acc.Phone, err)
 			continue

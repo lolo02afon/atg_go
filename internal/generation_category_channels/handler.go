@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"time"
 
-	"atg_go/internal/httputil"
+	"atg_go/internal/technical/httputil"
 	"atg_go/models"
 	"atg_go/pkg/storage"
-	"atg_go/pkg/telegram"
-	accountmutex "atg_go/pkg/telegram/module/account_mutex"
+	gcc "atg_go/pkg/telegram/generation_category_channels"
+	accountmutex "atg_go/pkg/telegram/technical/account_mutex"
 
 	"github.com/gin-gonic/gin"
 )
@@ -124,7 +124,7 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 
 		acc := free[accIdx%len(free)]
 		accIdx++
-		recs, err := telegram.GetChannelRecommendations(h.DB, acc, url)
+		recs, err := gcc.GetChannelRecommendations(h.DB, acc, url)
 		if err != nil {
 			log.Printf("[GENERATION WARN] не удалось получить рекомендации для %s аккаунтом %d: %v", url, acc.ID, err)
 			continue
@@ -170,7 +170,7 @@ func (h *Handler) GenerateCategory(c *gin.Context) {
 // и добавляет ссылку в результаты, если её ещё не было.
 // Возвращает true, если ссылка добавлена.
 func (h *Handler) appendChannelIfAccessible(acc models.Account, link string, seen map[string]struct{}, results *[]string) bool {
-	ok, err := telegram.HasAccessibleDiscussion(h.DB, acc, link)
+	ok, err := gcc.HasAccessibleDiscussion(h.DB, acc, link)
 	if err != nil {
 		log.Printf("[GENERATION WARN] не удалось проверить обсуждение для %s аккаунтом %d: %v", link, acc.ID, err)
 		return false
