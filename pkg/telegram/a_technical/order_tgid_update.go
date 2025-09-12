@@ -8,7 +8,7 @@ import (
 
 	"atg_go/models"
 	"atg_go/pkg/storage"
-	accountmutex "atg_go/pkg/telegram/technical/account_mutex"
+	accountmutex "atg_go/pkg/telegram/a_technical/account_mutex"
 
 	"github.com/gotd/td/tg"
 )

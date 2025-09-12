@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 
-	"atg_go/internal/technical/httputil"
+	"atg_go/internal/a_technical/httputil"
 	tgauth "atg_go/pkg/telegram/accounts_auth"
 
 	"github.com/gin-gonic/gin"

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"atg_go/pkg/storage"
-	base "atg_go/pkg/telegram/technical"
+	base "atg_go/pkg/telegram/a_technical"
 
 	"github.com/gotd/td/tg"
 	"github.com/lib/pq"

@@ -1,8 +1,8 @@
 package activity
 
 import (
-	"atg_go/internal/technical/common"
-	"atg_go/internal/technical/httputil"
+	"atg_go/internal/a_technical/common"
+	"atg_go/internal/a_technical/httputil"
 	"atg_go/models"
 	"atg_go/pkg/storage"
 	"errors"

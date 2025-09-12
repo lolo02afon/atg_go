@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"atg_go/internal/technical/httputil"
+	"atg_go/internal/a_technical/httputil"
 	"github.com/gin-gonic/gin"
 	"github.com/lib/pq"
 )

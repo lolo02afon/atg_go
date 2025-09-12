@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"time"
 
-	"atg_go/internal/technical/httputil"
+	"atg_go/internal/a_technical/httputil"
 	"atg_go/models"
 	"atg_go/pkg/storage"
+	accountmutex "atg_go/pkg/telegram/a_technical/account_mutex"
 	gcc "atg_go/pkg/telegram/generation_category_channels"
-	accountmutex "atg_go/pkg/telegram/technical/account_mutex"
 
 	"github.com/gin-gonic/gin"
 )

@@ -1,7 +1,7 @@
 package invite_activities_statistics
 
 import (
-	"atg_go/internal/technical/httputil"
+	"atg_go/internal/a_technical/httputil"
 	"atg_go/pkg/storage"
 	stats "atg_go/pkg/telegram/invite_activities_statistics"
 	"log"

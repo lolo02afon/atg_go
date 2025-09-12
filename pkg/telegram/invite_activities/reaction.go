@@ -12,8 +12,8 @@ import (
 
 	"atg_go/models"
 	"atg_go/pkg/storage"
-	module "atg_go/pkg/telegram/technical"
-	accountmutex "atg_go/pkg/telegram/technical/account_mutex"
+	module "atg_go/pkg/telegram/a_technical"
+	accountmutex "atg_go/pkg/telegram/a_technical/account_mutex"
 
 	"github.com/gotd/td/tg"
 )

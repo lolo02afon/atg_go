@@ -11,7 +11,7 @@ import (
 
 	"atg_go/models"
 	"atg_go/pkg/storage"
-	base "atg_go/pkg/telegram/technical"
+	base "atg_go/pkg/telegram/a_technical"
 
 	"github.com/gotd/td/tg"
 )

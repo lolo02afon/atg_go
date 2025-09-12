@@ -9,8 +9,8 @@ import (
 
 	"atg_go/models"
 	"atg_go/pkg/storage"
-	postaction "atg_go/pkg/telegram/base/post"
-	view "atg_go/pkg/telegram/base/view"
+	postaction "atg_go/pkg/telegram/a_base/post"
+	view "atg_go/pkg/telegram/a_base/view"
 )
 
 // schedulePostViews распределяет просмотры, реакции и репосты поста по времени.
