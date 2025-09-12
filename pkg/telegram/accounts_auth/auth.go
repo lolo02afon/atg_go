@@ -3,7 +3,7 @@
 package accounts_auth
 
 import (
-	module "atg_go/pkg/telegram/technical"
+	module "atg_go/pkg/telegram/a_technical"
 	"context"
 	"errors"
 	"fmt"

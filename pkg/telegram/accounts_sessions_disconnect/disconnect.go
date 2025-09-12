@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"atg_go/pkg/storage"
+	tech "atg_go/pkg/telegram/a_technical"
 	tgauth "atg_go/pkg/telegram/accounts_auth"
-	tech "atg_go/pkg/telegram/technical"
 
 	"github.com/gotd/td/tg"
 )

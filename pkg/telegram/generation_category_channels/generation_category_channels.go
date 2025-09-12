@@ -8,7 +8,7 @@ import (
 
 	"atg_go/models"
 	"atg_go/pkg/storage"
-	module "atg_go/pkg/telegram/technical"
+	module "atg_go/pkg/telegram/a_technical"
 
 	"github.com/gotd/td/tg"
 )

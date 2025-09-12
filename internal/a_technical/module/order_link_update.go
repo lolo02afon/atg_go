@@ -4,9 +4,9 @@ import (
 	"log"
 	"net/http"
 
+	"atg_go/internal/a_technical/httputil"
 	subactive "atg_go/internal/subs_active"
-	"atg_go/internal/technical/httputil"
-	telegrammodule "atg_go/pkg/telegram/technical"
+	telegrammodule "atg_go/pkg/telegram/a_technical"
 
 	"github.com/gin-gonic/gin"
 )

@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"atg_go/pkg/storage"
-	tgdup "atg_go/pkg/telegram/base/channel_duplicate"
-	base "atg_go/pkg/telegram/technical"
-	accountmutex "atg_go/pkg/telegram/technical/account_mutex"
-	tgmonitor "atg_go/pkg/telegram/technical/monitoring"
+	tgdup "atg_go/pkg/telegram/a_base/channel_duplicate"
+	base "atg_go/pkg/telegram/a_technical"
+	accountmutex "atg_go/pkg/telegram/a_technical/account_mutex"
+	tgmonitor "atg_go/pkg/telegram/a_technical/monitoring"
 
 	"github.com/gotd/td/tg"
 )

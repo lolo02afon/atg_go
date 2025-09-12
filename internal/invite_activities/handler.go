@@ -1,12 +1,12 @@
 package invite_activities
 
 import (
-	"atg_go/internal/technical/activity"
-	"atg_go/internal/technical/common"
-	"atg_go/internal/technical/httputil"
+	"atg_go/internal/a_technical/activity"
+	"atg_go/internal/a_technical/common"
+	"atg_go/internal/a_technical/httputil"
 	"atg_go/models"
 	"atg_go/pkg/storage"
-	userpkg "atg_go/pkg/telegram/base/user"
+	userpkg "atg_go/pkg/telegram/a_base/user"
 	invact "atg_go/pkg/telegram/invite_activities"
 	stats "atg_go/pkg/telegram/invite_activities_statistics"
 	"log"

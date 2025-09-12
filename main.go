@@ -1,14 +1,14 @@
 package main
 
 import (
+	orders "atg_go/internal/a_base/order"
+	"atg_go/internal/a_technical/middleware"
+	module "atg_go/internal/a_technical/module"
+	telegram "atg_go/internal/a_technical/telegram"
 	auth "atg_go/internal/accounts_auth"
-	orders "atg_go/internal/base/order"
 	genchannels "atg_go/internal/generation_category_channels"
 	invite "atg_go/internal/invite_activities"
 	statistics "atg_go/internal/invite_activities_statistics"
-	"atg_go/internal/technical/middleware"
-	module "atg_go/internal/technical/module"
-	telegram "atg_go/internal/technical/telegram"
 	"atg_go/pkg/storage"
 	"database/sql"
 	"log"

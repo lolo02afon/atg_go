@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 
-	"atg_go/internal/technical/httputil"
+	"atg_go/internal/a_technical/httputil"
 	"atg_go/pkg/storage"
 	tgsessions "atg_go/pkg/telegram/accounts_sessions_disconnect"
 

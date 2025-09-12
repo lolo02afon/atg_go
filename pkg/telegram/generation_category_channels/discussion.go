@@ -6,7 +6,7 @@ import (
 
 	"atg_go/models"
 	"atg_go/pkg/storage"
-	tech "atg_go/pkg/telegram/technical"
+	tech "atg_go/pkg/telegram/a_technical"
 
 	"github.com/gotd/td/tg"
 )

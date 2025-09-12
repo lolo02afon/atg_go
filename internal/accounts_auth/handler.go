@@ -5,7 +5,7 @@ import (
 	"errors"
 	"log"
 
-	"atg_go/internal/technical/httputil"
+	"atg_go/internal/a_technical/httputil"
 	"atg_go/models"
 	"atg_go/pkg/storage"
 	tgauth "atg_go/pkg/telegram/accounts_auth"
